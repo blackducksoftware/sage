@@ -22,6 +22,18 @@ projects = hub.get_projects(limit=99999)
 # data = dict()
 potential_issues = []
 
+# TODO: Check for un-mapped (i.e. orphaned) scans
+# TODO: Check for hung scans
+# TODO: Create health dashboard, e.g. projects with color-coded status, select project see versions with color-coded status, etc
+# TODO: Inspect scan dates/times to determine if pattern indicates same scan, diff names
+# TODO: Inspect scan paths to determine likelihood scan is for same folder, just different builds/commits
+# TODO: Recommend use of '--detect.project.codelocation.unmap' if scanning issues are determined?
+# TODO: Point to URL(s) of code in hub-rest-api-python/examples as part of advice to resolve something
+# TODO: Recommend using of --detect.project.application.id for projects without one?
+# TODO: Recommend setting Owner for projects without one
+# TODO: Recommend --detect.bom.aggregate.name when evidence of a large # of bom scans pointing to same version
+
+
 for project in projects['items']:
 	project_name = project['name']
 
@@ -29,6 +41,7 @@ for project in projects['items']:
 	if len(versions['items']) > args.max_versions:
 		issue = "Project {} has {} versions which is greater than max_versions {}".format(
 			project_name, len(versions['items']), args.max_versions)
+		# TODO: Advice with URL to program for cleaning up 'older' versions and their scans?
 		advice = "Review scanning best practices. Development/intermediate branches should only have one version - the latest. Only released/published/in-production versions should be retained."
 		potential_issues.append({
 			'project_name': project_name, 
@@ -43,6 +56,7 @@ for project in projects['items']:
 		if len(scans['items']) > args.max_scans:
 			issue = "Version {} from project {} has {} scans which is greater than max_scans {}".format(
 						version_name, project_name, len(scans['items']), args.max_scans)
+			# TODO: Advice about scans that perhaps should be removed based on a date/time analysis of when the scans occurred (i.e. Al's idea?)
 			advice = "Review scanning best practices and particularly the setting of scan (aka code location) names. Make sure the scan (aka code location) name does NOT include a build or commit ID"
 			potential_issues.append({
 				'project_name': project_name,
