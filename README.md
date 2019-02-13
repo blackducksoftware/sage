@@ -24,14 +24,14 @@ When run once as a spot check, sage runs and dumps its results into a json-forma
 
 ```bash
 mkdir /tmp/sage
-docker run -v /tmp/sage:/var/log/sage gsnyderbds/sage
+docker run -v /tmp/sage:/var/log gsnyderbds/sage
 ```
 
 ## Command to run as a service, detached from cluster
 
 ```bash
 mkdir /tmp/sage
-docker run -d -v /tmp/sage:/var/log/sage gsnyderbds/sage
+docker run -d -v /tmp/sage:/var/log gsnyderbds/sage
 ```
 
 ## Running as a service as part of docker swarm cluster
