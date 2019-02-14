@@ -32,3 +32,4 @@ docker run -v /tmp/sage:/var/log gsnyderbds/sage -h # will produce help
 docker run -v /tmp/sage:/var/log gsnyderbds/sage <hub-url> <api-token>
 ```
 
+Your results will be written to /tmp/sage directory.

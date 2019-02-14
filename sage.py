@@ -30,6 +30,9 @@ class BlackDuckSage(object):
 		self.unmapped_scans = []
 
 
+	def _remove_white_space(self, message):
+		return " ".join(message.split())
+
 	def analyze_version(self, project_name, version):
 		version_name = version['versionName']
 		logging.debug("Analyzing version {} for project {}".format(version_name, project_name))
@@ -47,13 +50,14 @@ class BlackDuckSage(object):
 				or sizes. If redundant scans are found, use --detect.code.location.name with hub-detect 
 				to override scan names and delete redundant scans.""".format(
 				project_name, version_name, num_scans, self.max_versions_per_project)
-			message = " ".join(message.split()) # remove extraneous whitespace
+			message = self._remove_white_space(message)
 			signature_scan_info = [
 				{
 					"scan_name": s['name'],
 					"scan_size": s['scanSize'],
 					"created_at": s['createdAt'],
 					"updated_at": s['updatedAt'],
+					"url": s['_meta']['href']
 				} for s in scans['items'] if s['name'].endswith('scan')
 			]
 			bom_scan_info = [
@@ -61,12 +65,14 @@ class BlackDuckSage(object):
 					"scan_name": s['name'],
 					"created_at": s['createdAt'],
 					"updated_at": s['updatedAt'],
+					"url": s['_meta']['href']
 				} for s in scans['items'] if s['name'].endswith('bom')
 			]
 			self.suspect_versions.append({
 					"message": message,
 					"signature_scan_info": signature_scan_info,
-					"bom_scan_info": bom_scan_info
+					"bom_scan_info": bom_scan_info,
+					"url": version['_meta']['href']
 				})
 
 
@@ -83,11 +89,46 @@ class BlackDuckSage(object):
 			message = "Project {} has 0 versions. Should it be removed?".format(project_name)
 			self.suspect_projects.append(message)
 		elif num_versions > self.max_versions_per_project:
-			message = "Project {} has {} versions which is greater than the recommend maximum of {}".format(
+			message = "Project {} has {} versions which is greater than the recommend maximum of {}.".format(
 				project_name, num_versions, self.max_versions_per_project)
+
+			released_versions = [v for v in versions['items'] if v['phase'] == 'RELEASED']
+			archived_versions = [v for v in versions['items'] if v['phase'] == 'ARCHIVED']
+
+			if len(released_versions) == 0:
+				message += "  There are 0 versions that have been released."
+			if len(archived_versions) == 0:
+				message += "  There are 0 versions that have been archived."
+
+			message += """  You should review these versions and remove extraneous ones, and their scans, 
+			to reclaim space and reduce clutter. Typically there should be one version per development 
+			branch, and one version per release.  When new vulnerabilities are published you want
+			to be able to quickly identify which projects are affected and take action.
+			Keeping a large number of un-released versions in the system will make that difficult.
+			And accruing a large number of versions per project can lead to serious performance degradation."""
+
+			message = self._remove_white_space(message)
+
+			self.suspect_projects.append({
+				"message": message,
+				"url": project['_meta']['href']
+				})
 
 		for version in versions['items']:
 			self.analyze_version(project_name, version)
+
+	def get_unmapped_scans(self):
+		unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
+		unmapped_scans = unmapped_scans['items']
+		unmapped_scans = [
+			{
+				"scan_name": s['name'], 
+				"url": s['_meta']['href'],
+				"scan_size": s['scanSize'],
+				"created_at": s['createdAt'],
+				"updated_at": s['updatedAt']
+				} for s in unmapped_scans]
+		return unmapped_scans
 
 	def analyze(self):
 		start = time.time()
@@ -103,11 +144,13 @@ class BlackDuckSage(object):
 		if elapsed > self.max_time_to_retrieve_projects:
 			message = """It took {} seconds to retrieve all the project info which is greater 
 				than the recommended max of {} seconds""".format(elapsed, self.max_time_to_retrieve_projects)
-			message = " ".message.split() # remove newline and extra spaces
+			message = self._remove_white_space(message)
 			self.other_issues.append(message)
 
 		for project in projects['items']:
 			self.analyze_project(project)
+
+		self.unmapped_scans = self.get_unmapped_scans()
 
 		analysis_results = {
 			"other_issues": self.other_issues,
@@ -120,10 +163,6 @@ class BlackDuckSage(object):
 			f.write(json.dumps(analysis_results))
 
 		logging.info("Wrote results to {}".format(self.file))
-
-	def unmapped_scans(self):
-		unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
-		return unmapped_scans
 
 if __name__ == "__main__":
 	from pprint import pprint
