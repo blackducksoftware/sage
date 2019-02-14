@@ -16,24 +16,19 @@ Analyze usage of a Black Duck system and offer sage advice for how to improve th
 
 # How to Run and Get Results
 
-Sage is built as a docker image and is meant to either be run one-time (spot check) or as a service attached to a running Black Duck instance. 
+Sage is built as a docker image and is meant to either be run one-time (spot check) or as a service attached to a running Black Duck instance (**service implementation not available yet**). 
 
-When run once as a spot check, sage runs and dumps its results into a json-formatted file for review, sharing. If run as a service, sage runs on a pre-configured schedule (default: once/day) and accumulates information that is summarized each day into a json-formatted file for reviewing, sharing. If running as a service, sage will look at time-series information to produce better observations.
+When run once as a spot check, sage runs and dumps its results into a json-formatted file for review, sharing. 
+
+If run as a service, sage runs on a pre-configured schedule (default: once/day) and accumulates information that is summarized each day into a json-formatted file for reviewing, sharing. If running as a service, sage will look at time-series information to produce better observations.
 
 ## Command to run one-time
 
-```bash
-mkdir /tmp/sage
-docker run -v /tmp/sage:/var/log gsnyderbds/sage
-```
-
-## Command to run as a service, detached from cluster
+You need to generate an api-token from an account that has appropriate access (e.g. sysadmin). Then,
 
 ```bash
 mkdir /tmp/sage
-docker run -d -v /tmp/sage:/var/log gsnyderbds/sage
+docker run -v /tmp/sage:/var/log gsnyderbds/sage -h # will produce help
+docker run -v /tmp/sage:/var/log gsnyderbds/sage <hub-url> <api-token>
 ```
 
-## Running as a service as part of docker swarm cluster
-
-TBD
