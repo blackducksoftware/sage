@@ -13,6 +13,9 @@ from blackduck.HubRestApi import HubInstance
 # TODO: Make it possible to change the port where the REST API is listening
 
 class BlackDuckSage(object):
+	COMMON_ATTRIBUTES = ['name', 'versionName', 'createdAt', 'createdBy', 'distribution', 
+		'phase', 'scanSize', 'settingUpdatedAt', 'updatedAt', 'updatedBy']
+
 	def __init__(self, hub_instance, **kwargs):
 		assert isinstance(hub_instance, HubInstance)
 		self.hub = hub_instance
@@ -33,16 +36,33 @@ class BlackDuckSage(object):
 	def _remove_white_space(self, message):
 		return " ".join(message.split())
 
+	def _copy_common_attributes(self, obj, **kwargs):
+		common_attribute_key_values = dict()
+		for attr in BlackDuckSage.COMMON_ATTRIBUTES:
+			if attr in obj:
+				common_attribute_key_values[attr] = obj[attr]
+		common_attribute_key_values.update({
+				"url": obj['_meta']['href']
+			})
+		for k,v in kwargs.items():
+			common_attribute_key_values[k] = v
+		return common_attribute_key_values
+
 	def analyze_version(self, project_name, version):
 		version_name = version['versionName']
 		logging.debug("Analyzing version {} for project {}".format(version_name, project_name))
 		scans = self.hub.get_version_codelocations(version)
 		num_scans = len(scans['items'])
 
+		version_info = self._copy_common_attributes(version, project_name=project_name)
+
 		if num_scans == 0:
 			message = "Project {}, version {} has 0 scans. Should it be removed?".format(
 				project_name, version_name)
-			self.suspect_versions.append(message)
+			version_info.update({
+				"message": message
+				})
+			self.suspect_versions.append(version_info)
 		elif num_scans > self.max_scans_per_version:
 			message = """Project {}, version {} has {} scans which is greater than 
 				the maximum recommended versions of {}. Review the scans to make sure there are not
@@ -51,29 +71,16 @@ class BlackDuckSage(object):
 				to override scan names and delete redundant scans.""".format(
 				project_name, version_name, num_scans, self.max_versions_per_project)
 			message = self._remove_white_space(message)
-			signature_scan_info = [
-				{
-					"scan_name": s['name'],
-					"scan_size": s['scanSize'],
-					"created_at": s['createdAt'],
-					"updated_at": s['updatedAt'],
-					"url": s['_meta']['href']
-				} for s in scans['items'] if s['name'].endswith('scan')
-			]
-			bom_scan_info = [
-				{
-					"scan_name": s['name'],
-					"created_at": s['createdAt'],
-					"updated_at": s['updatedAt'],
-					"url": s['_meta']['href']
-				} for s in scans['items'] if s['name'].endswith('bom')
-			]
-			self.suspect_versions.append({
+
+			signature_scan_info = [self._copy_common_attributes(s, project_name=project_name, version_name=version_name) for s in scans['items'] if s['name'].endswith('scan')]
+			bom_scan_info = [self._copy_common_attributes(s, project_name=project_name, version_name=version_name) for s in scans['items'] if s['name'].endswith('bom')]
+
+			version_info.update({
 					"message": message,
 					"signature_scan_info": signature_scan_info,
 					"bom_scan_info": bom_scan_info,
-					"url": version['_meta']['href']
 				})
+			self.suspect_versions.append(version_info)
 
 
 	def analyze_project(self, project):
@@ -85,9 +92,12 @@ class BlackDuckSage(object):
 		versions = self.hub.get_project_versions(project, limit=9999)
 		num_versions = len(versions['items'])
 
+		project_info = self._copy_common_attributes(project)
+
 		if num_versions == 0:
 			message = "Project {} has 0 versions. Should it be removed?".format(project_name)
-			self.suspect_projects.append(message)
+			project_info.update({"message": message})
+			self.suspect_projects.append(project_info)
 		elif num_versions > self.max_versions_per_project:
 			message = "Project {} has {} versions which is greater than the recommend maximum of {}.".format(
 				project_name, num_versions, self.max_versions_per_project)
@@ -108,11 +118,8 @@ class BlackDuckSage(object):
 			And accruing a large number of versions per project can lead to serious performance degradation."""
 
 			message = self._remove_white_space(message)
-
-			self.suspect_projects.append({
-				"message": message,
-				"url": project['_meta']['href']
-				})
+			project_info.update({"message": message})
+			self.suspect_projects.append(project_info)
 
 		for version in versions['items']:
 			self.analyze_version(project_name, version)
@@ -120,14 +127,7 @@ class BlackDuckSage(object):
 	def get_unmapped_scans(self):
 		unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
 		unmapped_scans = unmapped_scans['items']
-		unmapped_scans = [
-			{
-				"scan_name": s['name'], 
-				"url": s['_meta']['href'],
-				"scan_size": s['scanSize'],
-				"created_at": s['createdAt'],
-				"updated_at": s['updatedAt']
-				} for s in unmapped_scans]
+		unmapped_scans = [self._copy_common_attributes(s) for s in unmapped_scans]
 		return unmapped_scans
 
 	def analyze(self):
@@ -153,6 +153,7 @@ class BlackDuckSage(object):
 		self.unmapped_scans = self.get_unmapped_scans()
 
 		analysis_results = {
+			"hub_url": self.hub.get_urlbase(),
 			"other_issues": self.other_issues,
 			"unmapped_scans": self.unmapped_scans,
 			"suspect_projects": self.suspect_projects,
