@@ -67,8 +67,9 @@ class BlackDuckSage(object):
 			message = """Project {}, version {} has {} scans which is greater than 
 				the maximum recommended versions of {}. Review the scans to make sure there are not
 				redundant scans all mapped to this project version. Look for scans with similar names
-				or sizes. If redundant scans are found, use --detect.code.location.name with hub-detect 
-				to override scan names and delete redundant scans.""".format(
+				or sizes. If redundant scans are found, you should delete them and update the scanning
+				setup to use --detect.code.location.name with hub-detect to override scan names and 
+				delete redundant scans.""".format(
 				project_name, version_name, num_scans, self.max_versions_per_project)
 			message = self._remove_white_space(message)
 
@@ -115,7 +116,9 @@ class BlackDuckSage(object):
 			branch, and one version per release.  When new vulnerabilities are published you want
 			to be able to quickly identify which projects are affected and take action.
 			Keeping a large number of un-released versions in the system will make that difficult.
-			And accruing a large number of versions per project can lead to serious performance degradation."""
+			And accruing a large number of versions per project can lead to serious performance degradation.
+			Look at https://github.com/blackducksoftware/hub-rest-api-python/tree/master/examples for python examples
+			for finding/deleting/removing versions and their scans"""
 
 			message = self._remove_white_space(message)
 			project_info.update({"message": message})
@@ -150,7 +153,10 @@ class BlackDuckSage(object):
 		for project in projects['items']:
 			self.analyze_project(project)
 
-		self.unmapped_scans = self.get_unmapped_scans()
+		self.unmapped_scans = {
+			"message": "Unmapped scans represent scanning data that is not mapped to any project-version, and hence, they are potentially consuming space that should be reclaimed.",
+			"scans": self.get_unmapped_scans()
+		}
 
 		analysis_results = {
 			"hub_url": self.hub.get_urlbase(),
