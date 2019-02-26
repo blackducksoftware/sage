@@ -82,7 +82,10 @@ class BlackDuckSage(object):
 					"bom_scan_info": bom_scan_info,
 				})
 			self.suspect_versions.append(version_info)
+		else:
+			version_info.update({"message": "No issues identified for this version"})
 
+		return version_info
 
 	def analyze_project(self, project):
 		# Given a project REST API object, analyze its versions and their scans and return
@@ -123,9 +126,10 @@ class BlackDuckSage(object):
 			message = self._remove_white_space(message)
 			project_info.update({"message": message})
 			self.suspect_projects.append(project_info)
+		else:
+			project_info.update({"message": "No issues identified for this project"})
 
-		for version in versions['items']:
-			self.analyze_version(project_name, version)
+		return (project_info, versions)
 
 	def get_unmapped_scans(self):
 		unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
@@ -151,8 +155,12 @@ class BlackDuckSage(object):
 			self.other_issues.append(message)
 
 		for project in projects['items']:
-			self.analyze_project(project)
-
+			project_info, versions = self.analyze_project(project)
+			yield project_info
+			for version in versions['items']:
+				version_info = self.analyze_version(project['name'], version)
+				yield version_info
+				
 		self.unmapped_scans = {
 			"message": "Unmapped scans represent scanning data that is not mapped to any project-version, and hence, they are potentially consuming space that should be reclaimed.",
 			"scans": self.get_unmapped_scans()
@@ -198,7 +206,7 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stdout, level=logging.DEBUG)
+	logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
 	logging.getLogger("requests").setLevel(logging.WARNING)
 	logging.getLogger("urllib3").setLevel(logging.WARNING)
 	hub = HubInstance(args.hub_url, api_token = args.api_token, insecure=True, write_config_flag=False)
@@ -206,7 +214,8 @@ if __name__ == "__main__":
 	# TODO: Build and pass in the kwargs
 
 	sage = BlackDuckSage(hub)
-	sage.analyze()
+	for info in sage.analyze():
+		print(json.dumps(info))
 
 
 
