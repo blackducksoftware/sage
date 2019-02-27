@@ -257,7 +257,8 @@ if __name__ == "__main__":
 		"--mode", 
 		choices=["new", "resume"],
 		default="new",
-		help="Set to 'resume' to resume analysis or to 'new' to start new (default)")
+		help="""Set to 'resume' to resume analysis or to 'new' to start new (default). 
+Resuming requires a previously saved file is present to read the current state of analysis. 'New' will overwrite the analysis file.""")
 
 	default_max_versions_per_project=20
 	parser.add_argument(
@@ -282,9 +283,11 @@ if __name__ == "__main__":
 	logging.getLogger("urllib3").setLevel(logging.WARNING)
 	hub = HubInstance(args.hub_url, api_token = args.api_token, insecure=True, write_config_flag=False)
 
-	# TODO: Build and pass in the kwargs
-
-	sage = BlackDuckSage(hub, mode=args.mode)
+	sage = BlackDuckSage(
+		hub, 
+		mode=args.mode
+		max_versions_per_project=args.max_versions_per_project,
+		max_scans_per_version=args.max_scans_per_version)
 	sage.analyze()
 
 
