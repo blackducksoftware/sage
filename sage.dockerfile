@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY sage.py requirements.txt ./
 
-RUN ls -l
+# RUN ls -l
+# RUN pip freeze
 
 ENTRYPOINT [ "python", "./sage.py" ]
