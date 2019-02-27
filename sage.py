@@ -285,7 +285,7 @@ Resuming requires a previously saved file is present to read the current state o
 
 	sage = BlackDuckSage(
 		hub, 
-		mode=args.mode
+		mode=args.mode,
 		max_versions_per_project=args.max_versions_per_project,
 		max_scans_per_version=args.max_scans_per_version)
 	sage.analyze()
