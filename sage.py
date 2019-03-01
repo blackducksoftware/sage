@@ -192,6 +192,7 @@ class BlackDuckSage(object):
 		return unmapped_scans
 
 	def _jobs_analysis(self):
+		logging.debug("Gathering job statistics and sampling of jobs")
 		job_statistics = hub.get_job_statistics()
 		# Retrieve the last 1000 jobs
 		jobs_url = hub.get_urlbase() + "/api/v1/jobs?limit=1000"
