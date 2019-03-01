@@ -1,7 +1,5 @@
 import argparse
-from datetime import timedelta
-from dateutil import parser as dt_parser
-from difflib import SequenceMatcher
+from datetime import datetime, timedelta
 import json
 import logging
 import signal
@@ -37,6 +35,8 @@ class BlackDuckSage(object):
 			self.unmapped_scans = {}
 			self.reviewed_projects = set()
 			self.reviewed_versions = set()
+			self.jobs_info = {}
+			self.time_of_analysis = None
 		else:
 			with open(self.file, 'r') as f:
 				sage_data = json.load(f)
@@ -47,6 +47,7 @@ class BlackDuckSage(object):
 				self.unmapped_scans = sage_data['unmapped_scans']
 				self.reviewed_projects = set(sage_data['reviewed_projects'])
 				self.reviewed_versions = set(sage_data['reviewed_versions'])
+				self.jobs_info = sage_data["jobs_info"]
 		signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
 		signal.signal(signal.SIGTERM, lambda signal, frame: self._signal_handler())
 
@@ -190,15 +191,34 @@ class BlackDuckSage(object):
 		unmapped_scans = [self._copy_common_attributes(s) for s in unmapped_scans]
 		return unmapped_scans
 
+	def _jobs_analysis(self):
+		job_statistics = hub.get_job_statistics()
+		# Retrieve the last 1000 jobs
+		jobs_url = hub.get_urlbase() + "/api/v1/jobs?limit=1000"
+		response = hub.execute_get(jobs_url)
+		if response.status_code == 200:
+			jobs = response.json()
+			jobs_objs = jobs.get('items', [])
+		else:
+			jobs_objs = []
+		job_statistics_objs = job_statistics.get('items', [])
+
+		jobs_with_errors = [j for j in job_statistics_objs if j['totalFailures'] > 0]
+		jobs_in_progress = [j for j in job_statistics_objs if j['totalInProgress'] > 0]
+		jobs_average_run_times = [(j["jobType"], j['averageRuntime'].strip("PS").strip("S")) for j in job_statistics_objs]
+		return {"jobs_statistics": job_statistics_objs, "suspect_jobs": jobs_objs}
+
 	def _write_results(self):
 		analysis_results = {
 			"hub_url": self.hub.get_urlbase(),
+			"time_of_analysis": self.time_of_analysis.isoformat(),
 			"other_issues": self.other_issues,
 			"unmapped_scans": self.unmapped_scans,
 			"suspect_projects": self.suspect_projects,
 			"suspect_versions": self.suspect_versions,
 			"reviewed_projects": list(self.reviewed_projects),
-			"reviewed_versions": list(self.reviewed_versions)
+			"reviewed_versions": list(self.reviewed_versions),
+			"jobs_info": self.jobs_info
 		}
 		with open(self.file, 'w') as f:
 			logging.debug("Writing results to {}".format(self.file))
@@ -207,6 +227,7 @@ class BlackDuckSage(object):
 		logging.info("Wrote results to {}".format(self.file))
 
 	def analyze(self):
+		self.time_of_analysis = datetime.now()
 		start = time.time()
 		projects = self.hub.get_projects(limit=99999)
 		num_projects = len(projects['items'])
@@ -222,6 +243,9 @@ class BlackDuckSage(object):
 				than the recommended max of {} seconds""".format(elapsed, self.max_time_to_retrieve_projects)
 			message = self._remove_white_space(message)
 			self.other_issues.append(message)
+
+		if self.jobs_info == {}:
+			self.jobs_info = self._jobs_analysis()
 
 		if self.unmapped_scans == {}:
 			logging.debug("Retrieving unmapped scans")
@@ -281,6 +305,7 @@ Resuming requires a previously saved file is present to read the current state o
 	logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
 	logging.getLogger("requests").setLevel(logging.WARNING)
 	logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 	hub = HubInstance(args.hub_url, api_token = args.api_token, insecure=True, write_config_flag=False)
 
 	sage = BlackDuckSage(
