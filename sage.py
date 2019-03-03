@@ -2,6 +2,8 @@ import argparse
 from datetime import datetime, timedelta
 import json
 import logging
+import os
+from pathlib import Path
 import signal
 import sys
 import time
@@ -19,6 +21,7 @@ class BlackDuckSage(object):
 		assert isinstance(hub_instance, HubInstance)
 		self.hub = hub_instance
 		self.file = kwargs.get("file", "/var/log/sage_says.json")
+		self._check_file_permissions()
 		self.max_versions_per_project = kwargs.get('max_versions_per_project', 20)
 		self.max_scans_per_version = kwargs.get('max_scans_per_version', 10)
 		self.max_age_for_unmapped_scans = kwargs.get('max_age_unmapped_scans', 365) # days
@@ -50,6 +53,14 @@ class BlackDuckSage(object):
 				self.jobs_info = sage_data["jobs_info"]
 		signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
 		signal.signal(signal.SIGTERM, lambda signal, frame: self._signal_handler())
+
+	def _check_file_permissions(self):
+		f = Path(self.file)
+		if f.exists():
+			if not os.access(self.file, os.W_OK):
+				raise PermissionError("Need write access to file {} in order to save the analysis results".format(self.file))
+		else:
+			f = open(self.file, "w") # will fail if we don't have write permissions
 
 	def _signal_handler(self):
 		logging.debug("Handling interrupt and writing results to {}".format(self.file))
@@ -194,8 +205,8 @@ class BlackDuckSage(object):
 	def _jobs_analysis(self):
 		logging.debug("Gathering job statistics and sampling of jobs")
 		job_statistics = hub.get_job_statistics()
-		# Retrieve the last 1000 jobs
-		jobs_url = hub.get_urlbase() + "/api/v1/jobs?limit=1000"
+		# Retrieve the last 10000 jobs
+		jobs_url = hub.get_urlbase() + "/api/v1/jobs?limit=10000"
 		response = hub.execute_get(jobs_url)
 		if response.status_code == 200:
 			jobs = response.json()
@@ -204,10 +215,20 @@ class BlackDuckSage(object):
 			jobs_objs = []
 		job_statistics_objs = job_statistics.get('items', [])
 
+		failed_jobs = [j for j in jobs_objs if j['status'] == 'FAILED']
+		completed_jobs = [j for j in jobs_objs if j['status'] == 'COMPLETED']
+		other_jobs = [j for j in jobs_objs if j['status'] not in ['FAILED', 'COMPLETED']]
+		
 		jobs_with_errors = [j for j in job_statistics_objs if j['totalFailures'] > 0]
 		jobs_in_progress = [j for j in job_statistics_objs if j['totalInProgress'] > 0]
 		jobs_average_run_times = [(j["jobType"], j['averageRuntime'].strip("PS").strip("S")) for j in job_statistics_objs]
-		return {"jobs_statistics": job_statistics_objs, "suspect_jobs": jobs_objs}
+		return {
+			"jobs_statistics": job_statistics_objs, 
+			"jobs": {
+				"failed": failed_jobs,
+				"completed": completed_jobs,
+				"other": other_jobs,
+			}}
 
 	def _write_results(self):
 		analysis_results = {
@@ -312,6 +333,7 @@ Resuming requires a previously saved file is present to read the current state o
 	sage = BlackDuckSage(
 		hub, 
 		mode=args.mode,
+		file=args.file,
 		max_versions_per_project=args.max_versions_per_project,
 		max_scans_per_version=args.max_scans_per_version)
 	sage.analyze()
