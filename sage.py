@@ -14,6 +14,7 @@ from blackduck.HubRestApi import HubInstance
 # TODO: Make it possible to change the port where the REST API is listening
 
 class BlackDuckSage(object):
+	VERSION="1.0"
 	COMMON_ATTRIBUTES = ['name', 'versionName', 'createdAt', 'createdBy', 'distribution', 
 		'phase', 'scanSize', 'settingUpdatedAt', 'updatedAt', 'updatedBy']
 
@@ -33,8 +34,10 @@ class BlackDuckSage(object):
 		mode = kwargs.get("mode", "new")
 		if mode == "new":
 			self.other_issues = []
-			self.suspect_projects = []
-			self.suspect_versions = []
+			self.projects_with_too_many_versions = []
+			self.projects_without_an_owner = []
+			self.projects_without_any_release = []
+			self.versions_with_too_many_scans = []
 			self.unmapped_scans = {}
 			self.reviewed_projects = set()
 			self.reviewed_versions = set()
@@ -45,8 +48,10 @@ class BlackDuckSage(object):
 				sage_data = json.load(f)
 				self.other_issues = sage_data['other_issues']
 				self.unmapped_scans = sage_data['unmapped_scans']
-				self.suspect_projects = sage_data['suspect_projects']
-				self.suspect_versions = sage_data['suspect_versions']
+				self.projects_with_too_many_versions = sage_data['projects_with_too_many_versions']
+				self.projects_without_an_owner = sage_data['projects_without_an_owner']
+				self.projects_without_any_release = sage_data['projects_without_any_release']
+				self.versions_with_too_many_scans = sage_data['versions_with_too_many_scans']
 				self.unmapped_scans = sage_data['unmapped_scans']
 				self.reviewed_projects = set(sage_data['reviewed_projects'])
 				self.reviewed_versions = set(sage_data['reviewed_versions'])
@@ -111,7 +116,7 @@ class BlackDuckSage(object):
 				version_info.update({
 					"message": message
 					})
-				self.suspect_versions.append(version_info)
+				self.versions_with_too_many_scans.append(version_info)
 			elif num_scans > self.max_scans_per_version:
 				message = """Project {}, version {} has {} scans which is greater than 
 					the maximum recommended versions of {}. Review the scans to make sure there are not
@@ -130,7 +135,7 @@ class BlackDuckSage(object):
 						"signature_scan_info": signature_scan_info,
 						"bom_scan_info": bom_scan_info,
 					})
-				self.suspect_versions.append(version_info)
+				self.versions_with_too_many_scans.append(version_info)
 
 			self.reviewed_versions.add("{}:{}".format(project_name, version_name))
 
@@ -140,6 +145,20 @@ class BlackDuckSage(object):
 		project_name = project['name']
 
 		logging.debug("Analyzing project {}".format(project_name))
+
+		project_info = self._copy_common_attributes(project)
+
+		#
+		# Checking for an Owner
+		#
+		has_an_owner = project.get("projectOwner", False)
+		if has_an_owner == False:
+			message = """Project {} does not have an Owner. If tomorrow there is an Equifax-type vulnerability published, and if it
+			affects one of the versions in this project, how will you know who to contact to respond to the emergency?
+			""".format(project_name)
+			message = self._remove_white_space(message)
+			project_info.update({"message": message})
+			self.projects_without_an_owner.append(project_info)
 
 		logging.debug("Retrieving versions for project {}".format(project_name))
 		begin = time.time()
@@ -158,18 +177,31 @@ class BlackDuckSage(object):
 
 			num_versions = len(version_objs)
 
-			project_info = self._copy_common_attributes(project)
+			released_versions = [v for v in version_objs if v['phase'] == 'RELEASED']
+			archived_versions = [v for v in version_objs if v['phase'] == 'ARCHIVED']
 
+			#
+			# Checking if there are any versions RELEASED
+			#
+			if released_versions == []:
+				message = """Project {} has no released versions. So, if tomorrow an Equifax-like vulnerability is published, and if
+				it affects one or more versions in this project, how will you determine which version has been released (i.e. is running
+				in production or has been distributed to customers)? Marking the phase of a version as RELEASED is a good practice to
+				allow narrowing when it matters most.""".format(project_name)
+				mesasge = self._remove_white_space(message)
+				project_info.update({"message": message})
+				self.projects_without_any_release.append(project_info)
+
+			#
+			# Check the number of versions
+			#
 			if num_versions == 0:
 				message = "Project {} has 0 versions. Should it be removed?".format(project_name)
 				project_info.update({"message": message})
-				self.suspect_projects.append(project_info)
+				self.projects_with_too_many_versions.append(project_info)
 			elif num_versions > self.max_versions_per_project:
 				message = "Project {} has {} versions which is greater than the recommend maximum of {}.".format(
 					project_name, num_versions, self.max_versions_per_project)
-
-				released_versions = [v for v in versions['items'] if v['phase'] == 'RELEASED']
-				archived_versions = [v for v in versions['items'] if v['phase'] == 'ARCHIVED']
 
 				if len(released_versions) == 0:
 					message += "  There are 0 versions that have been released."
@@ -187,7 +219,7 @@ class BlackDuckSage(object):
 
 				message = self._remove_white_space(message)
 				project_info.update({"message": message})
-				self.suspect_projects.append(project_info)
+				self.projects_with_too_many_versions.append(project_info)
 
 			for version in version_objs:
 				version_key = "{}:{}".format(project['name'], version['versionName'])
@@ -198,7 +230,7 @@ class BlackDuckSage(object):
 
 	def get_unmapped_scans(self):
 		unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
-		unmapped_scans = unmapped_scans['items']
+		unmapped_scans = unmapped_scans.get('items', [])
 		unmapped_scans = [self._copy_common_attributes(s) for s in unmapped_scans]
 		return unmapped_scans
 
@@ -236,8 +268,10 @@ class BlackDuckSage(object):
 			"time_of_analysis": self.time_of_analysis.isoformat(),
 			"other_issues": self.other_issues,
 			"unmapped_scans": self.unmapped_scans,
-			"suspect_projects": self.suspect_projects,
-			"suspect_versions": self.suspect_versions,
+			"projects_with_too_many_versions": self.projects_with_too_many_versions,
+			"projects_without_an_owner": self.projects_without_an_owner,
+			"projects_without_any_release": self.projects_without_any_release,
+			"versions_with_too_many_scans": self.versions_with_too_many_scans,
 			"reviewed_projects": list(self.reviewed_projects),
 			"reviewed_versions": list(self.reviewed_versions),
 			"jobs_info": self.jobs_info
