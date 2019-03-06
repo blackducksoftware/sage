@@ -6,8 +6,6 @@ Analyze usage of a Black Duck system and offer sage advice for how to improve th
 
 - [Goals](#goals)
 - [How to Run and Get Results](#run)
-  -  [Command to run one-time](#one-time)
-    - [Sample Output](#one-time-sample-output)
 - [Release History](#release-history)
 
 ## Goals <a name="goals"/>
@@ -33,11 +31,20 @@ Sage uses:
 
 To run,
 
-```
+```bash
+mkvirtualenv sage # optional, but again, nice to use virtualenv and virtualenvwrapper
 pip install -r requirements.txt
 python3 sage.py -h # for help
 python3 sage.py https://your-hub-dns {api-token}
 ```
 
-Output will look like,
+# Release History <a name=release-history />
+
+## Mar 3, 2019
+
+Added job information
+
+
+
+
 
