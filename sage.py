@@ -265,6 +265,7 @@ class BlackDuckSage(object):
     def _write_results(self):
         analysis_results = {
             "hub_url": self.hub.get_urlbase(),
+            "hub_version": hub.version_info,
             "time_of_analysis": self.time_of_analysis.isoformat(),
             "other_issues": self.other_issues,
             "unmapped_scans": self.unmapped_scans,
