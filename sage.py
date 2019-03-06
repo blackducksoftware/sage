@@ -37,7 +37,7 @@ class BlackDuckSage(object):
             self.projects_with_too_many_versions = []
             self.projects_without_an_owner = []
             self.projects_without_any_release = []
-            self.versions_with_too_many_scans = []
+            self.versions_with_unusual_number_of_scans = []
             self.unmapped_scans = {}
             self.reviewed_projects = set()
             self.reviewed_versions = set()
@@ -51,7 +51,7 @@ class BlackDuckSage(object):
                 self.projects_with_too_many_versions = sage_data['projects_with_too_many_versions']
                 self.projects_without_an_owner = sage_data['projects_without_an_owner']
                 self.projects_without_any_release = sage_data['projects_without_any_release']
-                self.versions_with_too_many_scans = sage_data['versions_with_too_many_scans']
+                self.versions_with_unusual_number_of_scans = sage_data['versions_with_unusual_number_of_scans']
                 self.unmapped_scans = sage_data['unmapped_scans']
                 self.reviewed_projects = set(sage_data['reviewed_projects'])
                 self.reviewed_versions = set(sage_data['reviewed_versions'])
@@ -116,7 +116,7 @@ class BlackDuckSage(object):
                 version_info.update({
                     "message": message
                     })
-                self.versions_with_too_many_scans.append(version_info)
+                self.versions_with_unusual_number_of_scans.append(version_info)
             elif num_scans > self.max_scans_per_version:
                 message = """Project {}, version {} has {} scans which is greater than 
                     the maximum recommended versions of {}. Review the scans to make sure there are not
@@ -135,7 +135,7 @@ class BlackDuckSage(object):
                         "signature_scan_info": signature_scan_info,
                         "bom_scan_info": bom_scan_info,
                     })
-                self.versions_with_too_many_scans.append(version_info)
+                self.versions_with_unusual_number_of_scans.append(version_info)
 
             self.reviewed_versions.add("{}:{}".format(project_name, version_name))
 
@@ -158,7 +158,7 @@ class BlackDuckSage(object):
             """.format(project_name)
             message = self._remove_white_space(message)
             project_info.update({"message": message})
-            self.projects_without_an_owner.append(project_info)
+            self.projects_without_an_owner.append(project_info.copy())
 
         logging.debug("Retrieving versions for project {}".format(project_name))
         begin = time.time()
@@ -188,9 +188,9 @@ class BlackDuckSage(object):
                 it affects one or more versions in this project, how will you determine which version has been released (i.e. is running
                 in production or has been distributed to customers)? Marking the phase of a version as RELEASED is a good practice to
                 allow narrowing when it matters most.""".format(project_name)
-                mesasge = self._remove_white_space(message)
+                message = self._remove_white_space(message)
                 project_info.update({"message": message})
-                self.projects_without_any_release.append(project_info)
+                self.projects_without_any_release.append(project_info.copy())
 
             #
             # Check the number of versions
@@ -198,7 +198,7 @@ class BlackDuckSage(object):
             if num_versions == 0:
                 message = "Project {} has 0 versions. Should it be removed?".format(project_name)
                 project_info.update({"message": message})
-                self.projects_with_too_many_versions.append(project_info)
+                self.projects_with_too_many_versions.append(project_info.copy())
             elif num_versions > self.max_versions_per_project:
                 message = "Project {} has {} versions which is greater than the recommend maximum of {}.".format(
                     project_name, num_versions, self.max_versions_per_project)
@@ -219,7 +219,7 @@ class BlackDuckSage(object):
 
                 message = self._remove_white_space(message)
                 project_info.update({"message": message})
-                self.projects_with_too_many_versions.append(project_info)
+                self.projects_with_too_many_versions.append(project_info.copy())
 
             for version in version_objs:
                 version_key = "{}:{}".format(project['name'], version['versionName'])
@@ -271,7 +271,7 @@ class BlackDuckSage(object):
             "projects_with_too_many_versions": self.projects_with_too_many_versions,
             "projects_without_an_owner": self.projects_without_an_owner,
             "projects_without_any_release": self.projects_without_any_release,
-            "versions_with_too_many_scans": self.versions_with_too_many_scans,
+            "versions_with_unusual_number_of_scans": self.versions_with_unusual_number_of_scans,
             "reviewed_projects": list(self.reviewed_projects),
             "reviewed_versions": list(self.reviewed_versions),
             "jobs_info": self.jobs_info
