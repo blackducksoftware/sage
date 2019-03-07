@@ -42,20 +42,22 @@ class BlackDuckSage(object):
             self.reviewed_projects = set()
             self.reviewed_versions = set()
             self.jobs_info = {}
+            self.policy_info = {}
             self.time_of_analysis = None
         else:
             with open(self.file, 'r') as f:
                 sage_data = json.load(f)
-                self.other_issues = sage_data['other_issues']
-                self.unmapped_scans = sage_data['unmapped_scans']
-                self.projects_with_too_many_versions = sage_data['projects_with_too_many_versions']
-                self.projects_without_an_owner = sage_data['projects_without_an_owner']
-                self.projects_without_any_release = sage_data['projects_without_any_release']
-                self.versions_with_unusual_number_of_scans = sage_data['versions_with_unusual_number_of_scans']
-                self.unmapped_scans = sage_data['unmapped_scans']
-                self.reviewed_projects = set(sage_data['reviewed_projects'])
-                self.reviewed_versions = set(sage_data['reviewed_versions'])
-                self.jobs_info = sage_data["jobs_info"]
+                self.other_issues = sage_data.get('other_issues', [])
+                self.unmapped_scans = sage_data.get('unmapped_scans', [])
+                self.projects_with_too_many_versions = sage_data.get('projects_with_too_many_versions', [])
+                self.projects_without_an_owner = sage_data.get('projects_without_an_owner', [])
+                self.projects_without_any_release = sage_data.get('projects_without_any_release', [])
+                self.versions_with_unusual_number_of_scans = sage_data.get('versions_with_unusual_number_of_scans', [])
+                self.unmapped_scans = sage_data.get('unmapped_scans', {})
+                self.reviewed_projects = set(sage_data.get('reviewed_projects', []))
+                self.reviewed_versions = set(sage_data.get('reviewed_versions', []))
+                self.jobs_info = sage_data.get("jobs_info", {})
+                self.policy_info = sage_data.get("jobs_info", {})
         signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
         signal.signal(signal.SIGTERM, lambda signal, frame: self._signal_handler())
 
@@ -228,13 +230,33 @@ class BlackDuckSage(object):
 
             self.reviewed_projects.add(project_name)
 
+    def analyze_policies(self):
+        logging.debug("Retrieving policies")
+        policies = self.hub.get_policies()
+        enabled = list(filter(lambda p: p['enabled'], policies.get('items', [])))
+        disabled = list(filter(lambda p: not p['enabled'], policies.get('items', [])))
+
+        if len(enabled) == 0:
+            message = """There are no enabled policies on this server. You should create and enable policies that ensure appropriate
+            use of OSS within your organization. Moreover you should have 1 or more policies that ensure you will be 
+            notified if/when a new, serious vulnerability is published."""
+        else:
+            message = "You have {} enabled policies and {} disabled policies".format(len(enabled), len(disabled))
+
+        message = self._remove_white_space(message)
+        return {
+            "enabled": enabled,
+            "disabled": disabled,
+            "message": message
+        }
+
     def get_unmapped_scans(self):
         unmapped_scans = self.hub.get_codelocations(limit=999999, unmapped=True)
         unmapped_scans = unmapped_scans.get('items', [])
         unmapped_scans = [self._copy_common_attributes(s) for s in unmapped_scans]
         return unmapped_scans
 
-    def _jobs_analysis(self):
+    def analyze_jobs(self):
         logging.debug("Gathering job statistics and sampling of jobs")
         job_statistics = hub.get_job_statistics()
         # Retrieve the last 10000 jobs
@@ -275,7 +297,8 @@ class BlackDuckSage(object):
             "versions_with_unusual_number_of_scans": self.versions_with_unusual_number_of_scans,
             "reviewed_projects": list(self.reviewed_projects),
             "reviewed_versions": list(self.reviewed_versions),
-            "jobs_info": self.jobs_info
+            "jobs_info": self.jobs_info,
+            "policy_info": self.policy_info,
         }
         with open(self.file, 'w') as f:
             logging.debug("Writing results to {}".format(self.file))
@@ -301,8 +324,11 @@ class BlackDuckSage(object):
             message = self._remove_white_space(message)
             self.other_issues.append(message)
 
+        if self.policy_info == {}:
+            self.policy_info = self.analyze_policies()
+
         if self.jobs_info == {}:
-            self.jobs_info = self._jobs_analysis()
+            self.jobs_info = self.analyze_jobs()
 
         if self.unmapped_scans == {}:
             logging.debug("Retrieving unmapped scans")
