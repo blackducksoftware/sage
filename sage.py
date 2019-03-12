@@ -111,6 +111,7 @@ class BlackDuckSage(object):
             num_scans = len(scan_objs)
 
             version_info = self._copy_common_attributes(version, project_name=project_name)
+            version_info['num_scans'] = num_scans
 
             if num_scans == 0:
                 message = "Project {}, version {} has 0 scans. Should it be removed?".format(
@@ -178,6 +179,7 @@ class BlackDuckSage(object):
                 version_objs = []
 
             num_versions = len(version_objs)
+            project_info['num_versions'] = num_versions
 
             released_versions = [v for v in version_objs if v['phase'] == 'RELEASED']
             archived_versions = [v for v in version_objs if v['phase'] == 'ARCHIVED']
@@ -291,10 +293,12 @@ class BlackDuckSage(object):
             "time_of_analysis": self.time_of_analysis.isoformat(),
             "other_issues": self.other_issues,
             "unmapped_scans": self.unmapped_scans,
-            "projects_with_too_many_versions": self.projects_with_too_many_versions,
+            "projects_with_too_many_versions": sorted(self.projects_with_too_many_versions, 
+                key = lambda p: p['num_versions'], reverse = True),
             "projects_without_an_owner": self.projects_without_an_owner,
             "projects_without_any_release": self.projects_without_any_release,
-            "versions_with_unusual_number_of_scans": self.versions_with_unusual_number_of_scans,
+            "versions_with_unusual_number_of_scans": sorted(self.versions_with_unusual_number_of_scans,
+                key = lambda v: v['num_scans'], reverse = True),
             "reviewed_projects": list(self.reviewed_projects),
             "reviewed_versions": list(self.reviewed_versions),
             "jobs_info": self.jobs_info,
