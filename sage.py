@@ -122,12 +122,12 @@ class BlackDuckSage(object):
                 self.versions_with_unusual_number_of_scans.append(version_info)
             elif num_scans > self.max_scans_per_version:
                 message = """Project {}, version {} has {} scans which is greater than 
-                    the maximum recommended versions of {}. Review the scans to make sure there are not
+                    the maximum recommended scans of {}. Review the scans to make sure there are not
                     redundant scans all mapped to this project version. Look for scans with similar names
                     or sizes. If redundant scans are found, you should delete them and update the scanning
                     setup to use --detect.code.location.name with hub-detect to override scan names and 
                     delete redundant scans.""".format(
-                    project_name, version_name, num_scans, self.max_versions_per_project)
+                    project_name, version_name, num_scans, self.max_scans_per_version)
                 message = self._remove_white_space(message)
 
                 signature_scan_info = [self._copy_common_attributes(s, project_name=project_name, version_name=version_name) for s in scan_objs if s['name'].endswith('scan')]
