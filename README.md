@@ -30,7 +30,7 @@ To run,
 
 ```bash
 mkvirtualenv sage # optional, but again, nice to use virtualenv and virtualenvwrapper
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 python3 sage.py -h # for help
 python3 sage.py https://your-hub-dns {api-token}
 ```
