@@ -30,6 +30,7 @@ class BlackDuckSage(object):
         self.min_ratio_of_released_versions = kwargs.get("min_ratio_of_released_versions", 0.1) # min ratio of RELEASED versions to the total
         self.max_recommended_projects = int(kwargs.get("max_recommended_projects", 1000))
         self.max_time_to_retrieve_projects = int(kwargs.get("max_time_to_retrieve_projects", 60))
+        self.analyze_jobs_flag = kwargs.get("analyze_jobs", False)
         
         mode = kwargs.get("mode", "new")
         if mode == "new":
@@ -331,7 +332,7 @@ class BlackDuckSage(object):
         if self.policy_info == {}:
             self.policy_info = self.analyze_policies()
 
-        if self.jobs_info == {}:
+        if self.jobs_info == {} and self.analyze_jobs_flag:
             self.jobs_info = self.analyze_jobs()
 
         if self.unmapped_scans == {}:
@@ -362,6 +363,12 @@ if __name__ == "__main__":
         "--file", 
         default="/var/log/sage_says.json", 
         help="Change the name sage writes results into (default: sage_says.json")
+
+    parser.add_argument(
+        '-j',
+        '--jobs',
+        action='store_true',
+        help="Include this flag if you want to try to collect and analyze jobs info")
 
     parser.add_argument(
         "-m", 
@@ -400,7 +407,8 @@ Resuming requires a previously saved file is present to read the current state o
         mode=args.mode,
         file=args.file,
         max_versions_per_project=args.max_versions_per_project,
-        max_scans_per_version=args.max_scans_per_version)
+        max_scans_per_version=args.max_scans_per_version,
+        analyze_jobs = args.jobs)
     sage.analyze()
 
 
