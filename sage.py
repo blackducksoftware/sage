@@ -383,6 +383,7 @@ Resuming requires a previously saved file is present to read the current state o
         "-vp", 
         "--max_versions_per_project", 
         default=default_max_versions_per_project, 
+        type=int,
         help="Set max_versions_per_project to catch any projects having more than max_versions_per_project (default: {})".format(
             default_max_versions_per_project))
 
@@ -391,6 +392,7 @@ Resuming requires a previously saved file is present to read the current state o
         "-sv", 
         "--max_scans_per_version", 
         default=default_max_scans_per_version, 
+        type=int,
         help="Set max_scans to catch any project-versions with more than max_scans (default: {})".format(
             default_max_scans_per_version))
 

@@ -46,6 +46,8 @@ def project_with_too_many_versions(hub_instance):
 		project_parameters=project_parameters)
 
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stdout, level=logging.DEBUG)
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 hub = HubInstance()
 

@@ -2,9 +2,13 @@
 
 source /usr/local/bin/virtualenvwrapper.sh
 
-HUB_URL=${1:-https://ec2-18-217-189-8.us-east-2.compute.amazonaws.com}
-HUB_USERNAME=${2:-sysadmin}
-HUB_PASSWORD=${3:-blackduck}
+export PROJECT_NAME=${1:-too-many-scans}
+export VERSION_NAME=${2:-1.0}
+export CODE_LOC_NAME=$3
+
+HUB_URL=https://ec2-18-217-189-8.us-east-2.compute.amazonaws.com
+HUB_USERNAME=sysadmin
+HUB_PASSWORD=blackduck
 
 function create_venv_as_needed
 {
@@ -25,9 +29,9 @@ function scan {
 			--blackduck.username=${HUB_USERNAME} \
 			--blackduck.password=${HUB_PASSWORD} \
 			--blackduck.trust.cert=true \
+			--detect.tools=DETECTOR \
 			--detect.project.name=${project_name} \
 			--detect.project.version.name=${version_name} \
-			--detect.pip.requirements.path=requirements.txt \
 			--detect.policy.check.fail.on.severities=ALL"
 
 	if [ -f requirements.txt ]; then
@@ -39,13 +43,13 @@ function scan {
 	fi
 
 	echo "Running: detect ${detect_options}" > detect.log
-	detect ${detect_options} >> detect.log 2>&1
+	bash <(curl -s -L https://detect.synopsys.com/detect.sh) ${detect_options} >> detect.log 2>&1
 }
 
 function too-many-scans {
-	oss_python_component=(six cycler decorator future datedeux pipfile urllib3 isodate pycparser docutils)
+	oss_python_component=('Django==1.9.1' 'Django==1.9.2' 'Django==1.9.3' 'Django==1.9.4' 'Django==1.9.5' 'Django==1.9.6' 'Django==1.9.7' 'Django==1.9.8' 'Django==1.9.9' 'Django==2.1' 'Django==2.1.8')
 	compononent_index=0
-	for build_num in $(seq 1 11)
+	for build_num in $(seq 1 ${#oss_python_component[@]})
 	do
 		venv=$(create_venv_as_needed)
 		echo "======================================================"
@@ -64,7 +68,11 @@ function too-many-scans {
 		pip freeze
 		echo "-----"
 		echo "Running detect to produce scan for ${dir_name}"
-		scan too-many-scans 1.0
+		if [ -z "${CODE_LOC_NAME}" ]; then
+			scan ${PROJECT_NAME} ${VERSION_NAME}
+		else
+			scan ${PROJECT_NAME} ${VERSION_NAME} ${CODE_LOC_NAME}
+		fi
 		deactivate
 		cd ..
 		rmvirtualenv ${venv}
@@ -72,8 +80,8 @@ function too-many-scans {
 		echo "======================================================"
 	done	
 }
-mkdir -p test_data/scans
+mkdir -p test_data/scans/${PROJECT_NAME}
 
-cd test_data/scans
+cd test_data/scans/${PROJECT_NAME}
 
 too-many-scans
