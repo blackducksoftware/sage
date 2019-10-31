@@ -1,4 +1,4 @@
-blackduck >= 0.0.11
+blackduck >= 0.0.37
 python-dateutil >= 2.8.0
 
 # for unit tests

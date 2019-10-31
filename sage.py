@@ -262,23 +262,18 @@ class BlackDuckSage(object):
     def analyze_jobs(self):
         logging.debug("Gathering job statistics and sampling of jobs")
         job_statistics = hub.get_job_statistics()
-        # Retrieve the last 10000 jobs
-        jobs_url = hub.get_urlbase() + "/api/v1/jobs?limit=10000"
-        response = hub.execute_get(jobs_url)
-        if response.status_code == 200:
-            jobs = response.json()
-            jobs_objs = jobs.get('items', [])
-        else:
-            jobs_objs = []
         job_statistics_objs = job_statistics.get('items', [])
-
-        failed_jobs = [j for j in jobs_objs if j['status'] == 'FAILED']
-        completed_jobs = [j for j in jobs_objs if j['status'] == 'COMPLETED']
-        other_jobs = [j for j in jobs_objs if j['status'] not in ['FAILED', 'COMPLETED']]
         
         jobs_with_errors = [j for j in job_statistics_objs if j['totalFailures'] > 0]
         jobs_in_progress = [j for j in job_statistics_objs if j['totalInProgress'] > 0]
-        jobs_average_run_times = [(j["jobType"], j['averageRuntime'].strip("PS").strip("S")) for j in job_statistics_objs]
+        jobs_average_run_times = [(j["jobType"], j['averageRuntime'].strip("PT").strip("S")) for j in job_statistics_objs]
+
+        # Retrieve the last 1000 jobs
+        jobs = hub.get_jobs(parameters={'limit': '1000'}).get('items', [])
+
+        failed_jobs = [j for j in jobs if j['status'] == 'FAILED']
+        completed_jobs = [j for j in jobs if j['status'] == 'COMPLETED']
+        other_jobs = [j for j in jobs if j['status'] not in ['FAILED', 'COMPLETED']]
         return {
             "jobs_statistics": job_statistics_objs, 
             "jobs": {

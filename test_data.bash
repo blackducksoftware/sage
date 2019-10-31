@@ -69,8 +69,10 @@ function too-many-scans {
 		echo "-----"
 		echo "Running detect to produce scan for ${dir_name}"
 		if [ -z "${CODE_LOC_NAME}" ]; then
+			echo "No code location (scan) name provided, so detect will make up a name based on the folder path"
 			scan ${PROJECT_NAME} ${VERSION_NAME}
 		else
+			echo "A code location (scan) name provided (${CODE_LOC_NAME} so scans will over-write previous results"
 			scan ${PROJECT_NAME} ${VERSION_NAME} ${CODE_LOC_NAME}
 		fi
 		deactivate
