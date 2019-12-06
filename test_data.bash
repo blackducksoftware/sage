@@ -7,8 +7,10 @@ export VERSION_NAME=${2:-1.0}
 export CODE_LOC_NAME=$3
 
 HUB_URL=https://ec2-18-217-189-8.us-east-2.compute.amazonaws.com
-HUB_USERNAME=sysadmin
-HUB_PASSWORD=blackduck
+API_TOKEN=$(cat ~/.bd_tokens/demo-server-token) # substitute path to your token here
+
+# HUB_USERNAME=sysadmin
+# HUB_PASSWORD=blackduck
 
 function create_venv_as_needed
 {
