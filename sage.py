@@ -46,9 +46,6 @@ class BlackDuckSage(object):
         self.max_time_to_retrieve_projects = int(kwargs.get("max_time_to_retrieve_projects", 60))
         self.analyze_jobs_flag = kwargs.get("analyze_jobs", True)
         
-        # signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
-        # signal.signal(signal.SIGTERM, lambda signal, frame: self._signal_handler())
-
     def _check_file_permissions(self):
         f = Path(self.file)
         if f.exists():
@@ -56,11 +53,6 @@ class BlackDuckSage(object):
                 raise PermissionError("Need write access to file {} in order to save the analysis results".format(self.file))
         else:
             f = open(self.file, "w") # will fail if we don't have write permissions
-
-    # def _signal_handler(self):
-    #     logging.debug("Handling interrupt and writing results to {}".format(self.file))
-    #     self._write_results()
-    #     raise OSError("Interruped")
 
     def _remove_white_space(self, message):
         return " ".join(message.split())
@@ -77,7 +69,6 @@ class BlackDuckSage(object):
             common_attribute_key_values[k] = v
         return common_attribute_key_values
 
-
     def _write_results(self):
         with open(self.file, 'w') as f:
             logging.debug("Writing results to {}".format(self.file))
@@ -85,13 +76,16 @@ class BlackDuckSage(object):
 
         logging.info("Wrote results to {}".format(self.file))
 
-    def _is_sig_scan(self, scan_obj):
+    def _is_signature_scan(self, scan_obj):
         return scan_obj['name'].endswith("scan")
 
     def _is_bom_scan(self, scan_obj):
         return scan_obj['name'].endswith("bom")
         
     def _get_data(self):
+        '''Retrieve all the projects, versions, and scans and put them into self.data for
+        subsequent analysis.
+        '''
         logging.debug('Retrieving projects')
         projects = self.hub.get_projects(limit=99999).get('items', [])
         total_versions = 0
@@ -118,7 +112,7 @@ class BlackDuckSage(object):
         self.data['projects'] = projects
 
         logging.debug("Retrieving policies")
-        self.data['policies'] = self.hub.get_policies(parameters={'limit':1000})
+        self.data['policies'] = self.hub.get_policies(parameters={'limit':1000}).get('items', [])
 
         logging.debug("Retrieving scans")
         self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
@@ -126,14 +120,11 @@ class BlackDuckSage(object):
         self.data['total_versions'] = total_versions
         self.data['total_scans'] = len(self.data['scans'])
 
-    def analyze(self):
-        self.data = {}
-        self.data["time_of_analysis"] = datetime.now().isoformat()
-        self._get_data()
-
-        logging.debug("Analyzing data")
+    def _find_projects_with_too_many_versions(self):
         self.data['projects_with_too_many_versions'] = list(filter(
             lambda p: p['num_versions'] > self.max_versions_per_project, self.data['projects']))
+
+    def _find_versions_with_too_many_scans(self):
         versions_with_too_many_scans = []
         for p in self.data['projects']:
             versions_with_too_many_scans.extend(
@@ -141,18 +132,35 @@ class BlackDuckSage(object):
                     p['versions'])))
         self.data['versions_with_too_many_scans'] = versions_with_too_many_scans
 
+    def _find_versions_with_zero_scans(self):
         versions_with_no_scans = []
         for p in self.data['projects']:
             versions_with_no_scans.extend(
                 list(filter(lambda v: v['num_scans'] == 0, 
                     p['versions'])))
+        self.data['versions_with_zero_scans'] = versions_with_no_scans
+
+    def _find_unmapped_scans(self):
         self.data['unmapped_scans'] = list(filter(
             lambda s: s.get('mappedProjectVersion') == None, self.data['scans']))
         self.data['total_unmapped_scans'] = len(self.data['unmapped_scans'])
+
+    def analyze(self):
+        self.data = {}
+        self.data["time_of_analysis"] = datetime.now().isoformat()
+        self._get_data()
+
+        logging.debug("Analyzing data")
+        self._find_projects_with_too_many_versions()
+        self._find_versions_with_too_many_scans()
+        self._find_versions_with_zero_scans()
+        self._find_unmapped_scans()
         self.data['total_scans'] = len(self.data['scans'])
         self.data['total_scan_size'] = sum([s.get('scanSize', 0) for s in self.data['scans']])
-        self.data['number_sig_scans'] = len(list(filter(lambda s: self._is_sig_scan(s), self.data['scans'])))
-        self.data['number_bom_scans'] = len(list(filter(lambda s: self._is_bom_scan(s), self.data['scans'])))
+        self.data['number_signature_scans'] = len(list(filter(
+            lambda s: self._is_signature_scan(s), self.data['scans'])))
+        self.data['number_bom_scans'] = len(list(filter(
+            lambda s: self._is_bom_scan(s), self.data['scans'])))
 
         self.data["hub_url"] = self.hub.get_urlbase()
         self.data["hub_version"] = self.hub.version_info
