@@ -36,18 +36,32 @@ class SageAPITest(TestCase):
         self.assertEqual(phases_list, ['DEVELOPMENT'])
 
     #
-    # Get job name
+    # Get job info
     #
-    def test_get_job_name(self):
+    def test_get_job_info_defaults(self):
         job = Job()
         job.job_name = "my_job"
 
-        job_name = sageApi._get_job_name(job=job)
+        job_from_sage, job_name, test_mode  = sageApi._get_job_info(job=job)
+        self.assertEqual(job_from_sage, job)
         self.assertEqual(job_name, "my_job")
+        self.assertEqual(test_mode, True)
 
-    def test_get_job_name_when_no_job_is_supplied(self):
-        job_name = sageApi._get_job_name()
+    def test_get_job_info_disabling_test_mode(self):
+        job = Job()
+        job.job_name = "my_job"
+        job.test_mode = False
+
+        job_from_sage, job_name, test_mode  = sageApi._get_job_info(job=job)
+        self.assertEqual(job_from_sage, job)
+        self.assertEqual(job_name, "my_job")
+        self.assertEqual(test_mode, False)
+
+    def test_get_job_info_when_no_job_is_supplied(self):
+        job, job_name, test_mode = sageApi._get_job_info()
+        self.assertEqual(job, None)
         self.assertEqual(job_name, "Unknown")
+        self.assertEqual(test_mode, True)
 
 
     #
