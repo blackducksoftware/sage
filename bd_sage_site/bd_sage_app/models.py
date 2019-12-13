@@ -37,6 +37,9 @@ class JobRun(models.Model):
     result = models.TextField(max_length=2048, editable=False)
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
 
+    # TODO: Relate this to HubInstance
+    # TODO: Relate this to a Job
+    
     def __str__(self):
         return "{}: {}".format(self.created_at, self.result)
 
@@ -77,6 +80,7 @@ class Job(models.Model):
         help_text="Space separated key-value pairs that provide job-specific arguments")
     description = models.TextField(max_length=200, blank=True)
     running = models.BooleanField(default=True)
+    test_mode = models.BooleanField(default=True, help_text='If enabled, the job will only do a test run. Enabled by default beacuse many of the jobs delete data. Disable this to allow the job to perform the action.')
     trigger_type = models.CharField(
         max_length=20, 
         choices=TRIGGER_TYPES,
@@ -123,6 +127,8 @@ class SageQuerySet(models.QuerySet):
 
 class Sage(models.Model):
     objects = SageQuerySet.as_manager()
+
+    # TODO: Relate this to HubInstance
 
     filepath = models.CharField(max_length=1028, unique=True, help_text="The path to the JSON-formatted sage results")
     created_at = models.DateTimeField(auto_now_add=True)

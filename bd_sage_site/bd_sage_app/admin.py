@@ -10,6 +10,7 @@ class JobAdmin(admin.ModelAdmin):
         'job_args', 
         'description', 
         'running', 
+        'test_mode',
         'trigger_type', 
         'trigger_args',
         'created_at',

@@ -1,6 +1,0 @@
-{
-   "baseurl": "https://ec2-18-217-189-8.us-east-2.compute.amazonaws.com/",
-   "api_token": "YzE0YmQxZDQtZGE5Ny00YmFlLThkZDktMDAwODgwN2YxZjBkOjY5MDdkMTk1LTYwMDAtNGE5Zi04MDM0LTIyYzA4NGM4YmIzNA==",
-   "insecure": true,
-   "debug": false
-}
