@@ -45,7 +45,8 @@ class BlackDuckSage(object):
         self.max_recommended_projects = int(kwargs.get("max_recommended_projects", 1000))
         self.max_time_to_retrieve_projects = int(kwargs.get("max_time_to_retrieve_projects", 60))
         self.analyze_jobs_flag = kwargs.get("analyze_jobs", True)
-        
+        self.data = {}
+
     def _check_file_permissions(self):
         f = Path(self.file)
         if f.exists():
@@ -77,10 +78,10 @@ class BlackDuckSage(object):
         logging.info("Wrote results to {}".format(self.file))
 
     def _is_signature_scan(self, scan_obj):
-        return scan_obj['name'].endswith("scan")
+        return scan_obj['name'].lower().endswith("scan")
 
     def _is_bom_scan(self, scan_obj):
-        return scan_obj['name'].endswith("bom")
+        return (scan_obj['name'].lower().endswith("bom") or scan_obj['name'].lower().endswith("black duck i/o export"))
         
     def _get_data(self):
         '''Retrieve all the projects, versions, and scans and put them into self.data for
@@ -96,12 +97,9 @@ class BlackDuckSage(object):
             for version in versions:
                 version_name = version['versionName']
                 logging.debug("Retrieving scans for version {}".format(version_name))
-                scans = self.hub.get_version_codelocations(version, limit=1000)
+                scans = self.hub.get_version_codelocations(version, limit=1000).get('items', [])
                 if scans:
-                    scans = scans.get('items', [])
                     scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
-                else:
-                    scans = []
                 version['scans'] = scans
                 version['num_scans'] = len(scans)
             versions = [self._copy_common_attributes(v, project_name=project_name) for v in versions]
@@ -145,8 +143,14 @@ class BlackDuckSage(object):
             lambda s: s.get('mappedProjectVersion') == None, self.data['scans']))
         self.data['total_unmapped_scans'] = len(self.data['unmapped_scans'])
 
+    def _analyze_jobs(self):
+        url = self.hub.get_apibase() + "/job-statistics"
+        response = self.hub.execute_get(url)
+        job_statistics = response.json().get('items', [])
+        self.data['job_statistics'] = job_statistics
+
     def analyze(self):
-        self.data = {}
+        self.data["sage_version"] = BlackDuckSage.VERSION
         self.data["time_of_analysis"] = datetime.now().isoformat()
         self._get_data()
 
@@ -162,9 +166,14 @@ class BlackDuckSage(object):
         self.data['number_bom_scans'] = len(list(filter(
             lambda s: self._is_bom_scan(s), self.data['scans'])))
 
+        self.data['number_aggregate_bom_scans'] = len(list(filter(
+            lambda s: self._is_aggregate_bom_scan(s), self.data['scans'])))
+
         self.data["hub_url"] = self.hub.get_urlbase()
         self.data["hub_version"] = self.hub.version_info
 
+        if self.analyze_jobs_flag:
+            self._analyze_jobs()
         self._write_results()
 
 

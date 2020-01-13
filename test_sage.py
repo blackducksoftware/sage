@@ -1,5 +1,8 @@
 import json
+import os
 import pytest
+from stat import S_IREAD, S_IRGRP, S_IROTH, S_IWUSR
+import uuid
 
 from unittest.mock import MagicMock
 
@@ -12,6 +15,11 @@ invalid_bearer_token="anInvalidTokenValue"
 invalid_csrf_token="anInvalidCSRFTokenValue"
 made_up_api_token="theMadeUpAPIToken"
 hub_version = '2019.10.1'
+
+string_length = 8
+random_str = uuid.uuid4().hex
+random_str = random_str.upper()[0:string_length]
+f_name = "/tmp/sage_says.json_" + random_str
 
 @pytest.fixture()
 def mock_hub_instance(requests_mock):
@@ -37,14 +45,19 @@ def mock_hub_instance(requests_mock):
     )
 
     yield HubInstance(fake_hub_host, api_token=made_up_api_token)
+    try:
+        os.remove(f_name)
+        print("Removed {}".format(f_name))
+    except:
+        print("Failed to remove {}".format(f_name))
 
 
 def test_construction(mock_hub_instance):
-    sage = BlackDuckSage(mock_hub_instance, file="sage_says.json")
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     assert 'version' in sage.hub.version_info
     assert sage.hub.version_info['version'] == hub_version
-    assert sage.file == "sage_says.json"
+    assert sage.file == f_name
     assert sage.max_versions_per_project == 20
     assert sage.max_scans_per_version == 10
     assert sage.max_age_for_unmapped_scans == 365
@@ -60,7 +73,7 @@ def test_construction(mock_hub_instance):
         sage = BlackDuckSage(not_a_hub_instance)
 
 def test_get_data(mock_hub_instance):
-    sage = BlackDuckSage(mock_hub_instance, file="sage_says.json")
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     num_projects = 10
     get_projects_return = { 
@@ -108,7 +121,7 @@ def test_get_data(mock_hub_instance):
 
 
 def test_find_versions_with_zero_scans(mock_hub_instance):
-    sage = BlackDuckSage(mock_hub_instance, file="sage_says.json")
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     sage.data = {
         'projects': [
@@ -148,7 +161,7 @@ def test_find_versions_with_zero_scans(mock_hub_instance):
         assert v['versionName'] == "1.0"
 
 def test_find_versions_with_too_many_scans(mock_hub_instance):
-    sage = BlackDuckSage(mock_hub_instance, file="sage_says.json")
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     sage.data = {
         'projects': [
@@ -201,7 +214,7 @@ def test_find_versions_with_too_many_scans(mock_hub_instance):
         assert v['versionName'] == "2.0"
 
 def test_find_projects_with_too_many_versions(mock_hub_instance):
-    sage = BlackDuckSage(mock_hub_instance, file="sage_says.json")
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     sage.data = {
         'projects': [
@@ -223,7 +236,65 @@ def test_find_projects_with_too_many_versions(mock_hub_instance):
         assert p['name'] == 'projects_with_too_many_versions'
         assert p['num_versions'] == 21
 
+def test_is_siganture_scan(mock_hub_instance):
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
+    test_data = [
+        (False, "bom"),
+        (True, "scan"),
+        (True, "is a scan"),
+        (True, "SCAN"),
+        (False, "scan name string with scan at beginning of string, not end"),
+    ]
+    for td in test_data:
+        expected_result = td[0]
+        scan_name = td[1]
+        scan_obj = {'name': scan_name}
 
+        assert expected_result == sage._is_signature_scan(scan_obj)
 
+def test_is_bom_scan(mock_hub_instance):
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
+    test_data = [
+        (False, "scan"),
+        (True, "bom"),
+        (True, "is a bom"),
+        (True, "BOM"),
+        (True, "Black Duck I/O Export"),
+        (False, "bom scan name string with bom at beginning of string, not end"),
+    ]
+    for td in test_data:
+        expected_result = td[0]
+        scan_name = td[1]
+        scan_obj = {'name': scan_name}
+
+        assert expected_result == sage._is_bom_scan(scan_obj)
+
+def test_check_file_permissions(mock_hub_instance):
+    f_no_write_name = "/tmp/file_with_no_write_permission"
+    file_with_no_write_permission = open(f_no_write_name, "w")
+    os.chmod(f_no_write_name, S_IREAD | S_IRGRP | S_IROTH)
+
+    with pytest.raises(PermissionError) as e_info:
+        sage = BlackDuckSage(mock_hub_instance, file=f_no_write_name)
+
+    os.remove(f_no_write_name)
+
+def test_find_unmapped_scans(mock_hub_instance):
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
+
+    sage.data['scans'] = [
+        {'mappedProjectVersion': "https://fake-url"},
+        {'mappedProjectVersion': "https://fake-url"},
+        {'mappedProjectVersion': "https://fake-url"},
+        {},
+    ]
+
+    sage._find_unmapped_scans()
+
+    assert 'unmapped_scans' in sage.data
+    assert 'total_unmapped_scans' in sage.data
+    assert sage.data['unmapped_scans'] == [ {} ]
+
+    assert sage.data['total_unmapped_scans'] == 1
