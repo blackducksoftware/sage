@@ -166,9 +166,6 @@ class BlackDuckSage(object):
         self.data['number_bom_scans'] = len(list(filter(
             lambda s: self._is_bom_scan(s), self.data['scans'])))
 
-        self.data['number_aggregate_bom_scans'] = len(list(filter(
-            lambda s: self._is_aggregate_bom_scan(s), self.data['scans'])))
-
         self.data["hub_url"] = self.hub.get_urlbase()
         self.data["hub_version"] = self.hub.version_info
 
