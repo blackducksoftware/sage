@@ -121,6 +121,18 @@ class BlackDuckSage(object):
     def _find_projects_with_too_many_versions(self):
         self.data['projects_with_too_many_versions'] = list(filter(
             lambda p: p['num_versions'] > self.max_versions_per_project, self.data['projects']))
+        for project in self.data['projects_with_too_many_versions']:
+            project['message'] = """Project {} has {} versions which is greater than
+                the threshold of {}. You should review these versions and remove extraneous ones,
+                and their scans, to reclaim space and reduce clutter. Typically, there should be
+                one version per development branch, and one version per release. When new vulnerabilities are published you want
+                to be able to quickly identify which projects are affected and take action.
+                Keeping a large number of un-released versions in the system will make that difficult.
+                And accruing a large number of versions per project can lead to serious performance degradation.
+                Look at https://github.com/blackducksoftware/hub-rest-api-python/tree/master/examples for python examples
+                for finding/deleting/removing versions and their scans.""".format(project['name'], 
+                    project['num_versions'], self.max_versions_per_project)
+            project['message'] = self._remove_white_space(project['message'])
 
     def _find_versions_with_too_many_scans(self):
         versions_with_too_many_scans = []
@@ -129,6 +141,15 @@ class BlackDuckSage(object):
                 list(filter(lambda v: v['num_scans'] > self.max_scans_per_version, 
                     p['versions'])))
         self.data['versions_with_too_many_scans'] = versions_with_too_many_scans
+        for v in self.data['versions_with_too_many_scans']:
+            v['message'] = """Project {}, version {} has {} scans which is greater than 
+                    the maximum recommended scans of {}. Review the scans to make sure there are not
+                    redundant scans all mapped to this project version. Look for scans with similar names
+                    or sizes. If redundant scans are found, you should delete them and update the scanning
+                    setup to use --detect.code.location.name with hub-detect to override scan names and 
+                    delete redundant scans.""".format(
+                    v['project_name'], v['versionName'], v['num_scans'], self.max_scans_per_version)
+            v['message'] = self._remove_white_space(v['message'])
 
     def _find_versions_with_zero_scans(self):
         versions_with_no_scans = []
@@ -137,11 +158,22 @@ class BlackDuckSage(object):
                 list(filter(lambda v: v['num_scans'] == 0, 
                     p['versions'])))
         self.data['versions_with_zero_scans'] = versions_with_no_scans
+        for v in self.data['versions_with_zero_scans']:
+            v['message'] = """Project {}, version {} has 0 scans. You should review this version and
+            delete it if it is not being used. One exception is if someone created this project-version
+            to populate with components manually, i.e. no scans are mapped to it, but the BOM inside this
+            version is populated by manually adding components to it.""".format(
+                    v['project_name'], v['versionName'])
+            v['message'] = self._remove_white_space(v['message'])
 
     def _find_unmapped_scans(self):
         self.data['unmapped_scans'] = list(filter(
             lambda s: s.get('mappedProjectVersion') == None, self.data['scans']))
         self.data['total_unmapped_scans'] = len(self.data['unmapped_scans'])
+        for ums in self.data['unmapped_scans']:
+            ums['message'] = """This scan, {}, is not mapped to any project-version in the system. It should
+                either be mapped to something or deleted to reclaim space and reduce clutter.""".format(ums['name'])
+            ums['message'] = self._remove_white_space(ums['message'])
 
     def _analyze_jobs(self):
         url = self.hub.get_apibase() + "/job-statistics"
