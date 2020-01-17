@@ -1,6 +1,6 @@
 import argparse
 from datetime import datetime, timedelta
-from dateutil import parser
+from dateutil import parser as dt_parser
 import json
 import logging
 import os
@@ -191,7 +191,7 @@ class BlackDuckSage(object):
         high_freq_scans = []
         for scan in self.data['scans']:
             if scan.get('scan_summaries') and len(scan['scan_summaries']) > 1:
-                scan_create_dts = sorted([parser.parse(s['createdAt']) for s in scan['scan_summaries']])
+                scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scan['scan_summaries']])
                 total_span_less_than_24h = (scan_create_dts[-1] - scan_create_dts[0]) < timedelta(days=1)
                 spans = [
                     scan_create_dts[i] - scan_create_dts[i-1] for i in range(1, len(scan_create_dts))
@@ -200,7 +200,7 @@ class BlackDuckSage(object):
                 if any_span_less_than_24h or total_span_less_than_24h:
                     scan['message'] = """This scan (aka code location) has two or more scans (out of {}) that
                         were run within 24 hours of each other which may indicate a scan that is being run too
-                        often.""".format(len(scan_create_dts))
+                        often. Consider reducing the frequency to once per day.""".format(len(scan_create_dts))
                     scan['message'] = self._remove_white_space(scan['message'])
                     high_freq_scans.append(scan)
         self.data['high_frequency_scans'] = high_freq_scans
@@ -221,6 +221,7 @@ class BlackDuckSage(object):
         self._find_versions_with_too_many_scans()
         self._find_versions_with_zero_scans()
         self._find_unmapped_scans()
+        self._find_high_frequency_scans()
         self.data['total_scans'] = len(self.data['scans'])
         self.data['total_scan_size'] = sum([s.get('scanSize', 0) for s in self.data['scans']])
         self.data['number_signature_scans'] = len(list(filter(
