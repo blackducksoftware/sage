@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import pytest
@@ -105,6 +106,8 @@ def test_get_data(mock_hub_instance):
     }
     sage.hub.get_codelocations = MagicMock(return_value=get_codelocations_return)
     
+    sage.hub.get_codelocation_scan_summaries = MagicMock()
+    
     sage.data = {}
     sage._get_data()
 
@@ -129,10 +132,12 @@ def test_find_versions_with_zero_scans(mock_hub_instance):
                 'name': 'project1',
                 'versions': [
                     {
+                        'project_name': 'project1',
                         'versionName': '1.0',
                         'num_scans': 0
                     },
                     {
+                        'project_name': 'project1',
                         'versionName': '2.0',
                         'num_scans': 1
                     },
@@ -142,10 +147,12 @@ def test_find_versions_with_zero_scans(mock_hub_instance):
                 'name': 'project2',
                 'versions': [
                     {
+                        'project_name': 'project2',
                         'versionName': '1.0',
                         'num_scans': 0
                     },
                     {
+                        'project_name': 'project2',
                         'versionName': '2.0',
                         'num_scans': 1
                     },
@@ -169,10 +176,12 @@ def test_find_versions_with_too_many_scans(mock_hub_instance):
                 'name': 'project1',
                 'versions': [
                     {
+                        'project_name': 'project1',
                         'versionName': '1.0',
                         'num_scans': 0
                     },
                     {
+                        'project_name': 'project1',
                         'versionName': '2.0',
                         'num_scans': 21
                     },
@@ -182,10 +191,12 @@ def test_find_versions_with_too_many_scans(mock_hub_instance):
                 'name': 'project2',
                 'versions': [
                     {
+                        'project_name': 'project2',
                         'versionName': '1.0',
                         'num_scans': 0
                     },
                     {
+                        'project_name': 'project2',
                         'versionName': '2.0',
                         'num_scans': 21
                     },
@@ -195,10 +206,12 @@ def test_find_versions_with_too_many_scans(mock_hub_instance):
                 'name': 'project3',
                 'versions': [
                     {
+                        'project_name': 'project3',
                         'versionName': '1.0',
                         'num_scans': 0
                     },
                     {
+                        'project_name': 'project3',
                         'versionName': '2.0',
                         'num_scans': 21
                     },
@@ -285,16 +298,59 @@ def test_find_unmapped_scans(mock_hub_instance):
     sage = BlackDuckSage(mock_hub_instance, file=f_name)
 
     sage.data['scans'] = [
-        {'mappedProjectVersion': "https://fake-url"},
-        {'mappedProjectVersion': "https://fake-url"},
-        {'mappedProjectVersion': "https://fake-url"},
-        {},
+        {'name': 'scan1', 'mappedProjectVersion': "https://fake-url"},
+        {'name': 'scan2', 'mappedProjectVersion': "https://fake-url"},
+        {'name': 'scan3', 'mappedProjectVersion': "https://fake-url"},
+        {'name': 'unmapped_scan'},
     ]
 
     sage._find_unmapped_scans()
 
     assert 'unmapped_scans' in sage.data
     assert 'total_unmapped_scans' in sage.data
-    assert sage.data['unmapped_scans'] == [ {} ]
+    assert sage.data['unmapped_scans'] == [ 
+        {'name': 'unmapped_scan',
+        'message': 'This scan, unmapped_scan, is not mapped to any project-version in the system. It should either be mapped to something or deleted to reclaim space and reduce clutter.'} 
+    ]
 
     assert sage.data['total_unmapped_scans'] == 1
+
+
+def test_find_high_frequency_scans(mock_hub_instance):
+    sage = BlackDuckSage(mock_hub_instance, file=f_name)
+
+    one_scan_summary = [
+        {'createdAt': datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"), 
+        'updatedAt': (datetime.now(timezone.utc) + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")}]
+
+    high_freq_scan_summaries = []
+    for i in range(5):
+        high_freq_scan_summaries.append({
+            'createdAt': (datetime.now(timezone.utc) + timedelta(minutes=i*60)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            'updatedAt': (datetime.now(timezone.utc) + timedelta(minutes=i*60) + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            })
+
+    lower_freq_scan_summaries = []
+    for i in range(5):
+        lower_freq_scan_summaries.append({
+            'createdAt': (datetime.now(timezone.utc) + timedelta(days=i*60)).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            'updatedAt': (datetime.now(timezone.utc) + timedelta(days=i*60) + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            })
+
+    sage.data['scans'] = [
+        {'name': 'one_scan', 'scan_summaries': one_scan_summary },
+        {'name': 'high_freq_scan', 'scan_summaries': high_freq_scan_summaries},
+        {'name': 'lower_freq_scan', 'scan_summaries': lower_freq_scan_summaries},
+    ]
+
+    sage._find_high_frequency_scans()
+
+    assert 'high_frequency_scans' in sage.data
+    assert 'high_freq_scan' in [s['name'] for s in sage.data['high_frequency_scans']]
+    assert 'one_scan' not in [s['name'] for s in sage.data['high_frequency_scans']]
+    assert 'lower_freq_scan' not in [s['name'] for s in sage.data['high_frequency_scans']]
+    # 
+    # all high frequency scans should include a message explaining why this may be undesirable
+    assert all(map(lambda s: 'message' in s, sage.data['high_frequency_scans']))
+
+

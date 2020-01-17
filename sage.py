@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime, timedelta
+from dateutil import parser
 import json
 import logging
 import os
@@ -10,8 +11,15 @@ import time
 
 from blackduck.HubRestApi import HubInstance
 
-# TODO: Incorporate points/scoring to the various analysis results so we can start to provide an overall score
-# TODO: Make it possible to change the port where the REST API is listening
+# TODO: Find scans (code locations) whose scan frequency is higher than we recommend
+# TODO: Find signature scans taking a long time to complete (e.g. > 30m ) and suggest they be optimized, e.g. by splitting things up
+# TODO: Find signature scans that are particular large and should possibly be split up
+# TODO: Find projects that don't have any Released versions
+# TODO: Find Released versions that don't have any reports
+# TODO: Find projects that don't have an owner
+# TODO: Analyze versions and their reports to see if customer is using them
+# TODO: Analyze global reports to see if customer is using them
+
 
 class BlackDuckSage(object):
     VERSION="2.0"
@@ -27,6 +35,7 @@ class BlackDuckSage(object):
         'phase', 
         'scans',
         'scanSize', 
+        'scan_summaries',
         'settingUpdatedAt',
         'versions',
         'updatedAt', 
@@ -98,8 +107,7 @@ class BlackDuckSage(object):
                 version_name = version['versionName']
                 logging.debug("Retrieving scans for version {}".format(version_name))
                 scans = self.hub.get_version_codelocations(version, limit=1000).get('items', [])
-                if scans:
-                    scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
+                scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
                 version['scans'] = scans
                 version['num_scans'] = len(scans)
             versions = [self._copy_common_attributes(v, project_name=project_name) for v in versions]
@@ -112,8 +120,12 @@ class BlackDuckSage(object):
         logging.debug("Retrieving policies")
         self.data['policies'] = self.hub.get_policies(parameters={'limit':1000}).get('items', [])
 
-        logging.debug("Retrieving scans")
+        logging.debug("Retrieving scans and scan summaries (aka scan history)")
         self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
+        for scan in self.data['scans']:
+            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
+            scan['scan_summaries'] = scan_summaries
+
         self.data['total_projects'] = len(projects)
         self.data['total_versions'] = total_versions
         self.data['total_scans'] = len(self.data['scans'])
@@ -174,6 +186,24 @@ class BlackDuckSage(object):
             ums['message'] = """This scan, {}, is not mapped to any project-version in the system. It should
                 either be mapped to something or deleted to reclaim space and reduce clutter.""".format(ums['name'])
             ums['message'] = self._remove_white_space(ums['message'])
+
+    def _find_high_frequency_scans(self):
+        high_freq_scans = []
+        for scan in self.data['scans']:
+            if scan.get('scan_summaries') and len(scan['scan_summaries']) > 1:
+                scan_create_dts = sorted([parser.parse(s['createdAt']) for s in scan['scan_summaries']])
+                total_span_less_than_24h = (scan_create_dts[-1] - scan_create_dts[0]) < timedelta(days=1)
+                spans = [
+                    scan_create_dts[i] - scan_create_dts[i-1] for i in range(1, len(scan_create_dts))
+                ]
+                any_span_less_than_24h = any([s < timedelta(days=1) for s in spans])
+                if any_span_less_than_24h or total_span_less_than_24h:
+                    scan['message'] = """This scan (aka code location) has two or more scans (out of {}) that
+                        were run within 24 hours of each other which may indicate a scan that is being run too
+                        often.""".format(len(scan_create_dts))
+                    scan['message'] = self._remove_white_space(scan['message'])
+                    high_freq_scans.append(scan)
+        self.data['high_frequency_scans'] = high_freq_scans
 
     def _analyze_jobs(self):
         url = self.hub.get_apibase() + "/job-statistics"
