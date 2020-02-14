@@ -3,4 +3,5 @@ python-dateutil >= 2.8.0
 
 # for unit tests
 pytest
+pytest-cov
 requests-mock

@@ -7,15 +7,17 @@ export VERSION_NAME=${2:-1.0}
 export CODE_LOC_NAME=$3
 
 HUB_URL=https://ec2-18-217-189-8.us-east-2.compute.amazonaws.com
-HUB_USERNAME=sysadmin
-HUB_PASSWORD=blackduck
+API_TOKEN=$(cat ~/.bd_tokens/demo-server-token) # substitute path to your token here
+
+# HUB_USERNAME=sysadmin
+# HUB_PASSWORD=blackduck
 
 function create_venv_as_needed
 {
 	venv=sage_test_data
 	look_for_venv=$(lsvirtualenv | grep ${venv})
 	if [ -z "${look_for_venv}" ]; then
-		mkvirtualenv ${venv} > /dev/null 2>&1
+		mkvirtualenv ${venv} -p $(which python3) > /dev/null 2>&1
 	fi
 	echo $venv
 }
@@ -26,13 +28,12 @@ function scan {
 	scan_name=${3:-""}
 
 	detect_options="--blackduck.url=${HUB_URL} \
-			--blackduck.username=${HUB_USERNAME} \
-			--blackduck.password=${HUB_PASSWORD} \
+			--blackduck.api.token=${API_TOKEN} \
 			--blackduck.trust.cert=true \
 			--detect.tools=DETECTOR \
 			--detect.project.name=${project_name} \
 			--detect.project.version.name=${version_name} \
-			--detect.policy.check.fail.on.severities=ALL"
+			--detect.wait.for.results=true"
 
 	if [ -f requirements.txt ]; then
 		detect_options="${detect_options} --detect.pip.requirements.path=requirements.txt"
@@ -42,8 +43,14 @@ function scan {
 		detect_options="${detect_options} --detect.code.location.name=${scan_name}"
 	fi
 
-	echo "Running: detect ${detect_options}" > detect.log
+	echo "Running: detect ${detect_options}"
 	bash <(curl -s -L https://detect.synopsys.com/detect.sh) ${detect_options} >> detect.log 2>&1
+
+	if [ $? -eq 0 ] || [ $? -e 3 ]; then
+		echo "detect SUCCEEDED"
+	else
+		echo "detect FAILED"
+	fi
 }
 
 function too-many-scans {
