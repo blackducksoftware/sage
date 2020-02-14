@@ -30,6 +30,7 @@ class BlackDuckSage(object):
         'createdBy', 
         'distribution', 
         'mappedProjectVersion',
+        'num_bom_scans',
         'num_scans',
         'num_versions',
         'phase', 
@@ -92,6 +93,9 @@ class BlackDuckSage(object):
     def _is_bom_scan(self, scan_obj):
         return (scan_obj['name'].lower().endswith("bom") or scan_obj['name'].lower().endswith("black duck i/o export"))
         
+    def _number_bom_scans(self, scans):
+        return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
+
     def _get_data(self):
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
@@ -109,6 +113,7 @@ class BlackDuckSage(object):
                 scans = self.hub.get_version_codelocations(version, limit=1000).get('items', [])
                 scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
                 version['scans'] = scans
+                version['num_bom_scans'] = self._number_bom_scans(scans)
                 version['num_scans'] = len(scans)
             versions = [self._copy_common_attributes(v, project_name=project_name) for v in versions]
             project['versions'] = versions
@@ -158,9 +163,14 @@ class BlackDuckSage(object):
                     the maximum recommended scans of {}. Review the scans to make sure there are not
                     redundant scans all mapped to this project version. Look for scans with similar names
                     or sizes. If redundant scans are found, you should delete them and update the scanning
-                    setup to use --detect.code.location.name with hub-detect to override scan names and 
+                    setup to use --detect.code.location.name with Synopsys detect to override scan names and 
                     delete redundant scans.""".format(
                     v['project_name'], v['versionName'], v['num_scans'], self.max_scans_per_version)
+            if v['num_bom_scans'] > self.max_scans_per_version:
+                v['message'] += """There are {} BOM scans in this version. 
+                    You should consider using {} to aggregate them into one scan which 
+                    will reduce the processing load on the server and usually reduce the 
+                    time it takes to complete the scan.""".format(v['num_bom_scans'], "--detect.bom.aggregate.name")
             v['message'] = self._remove_white_space(v['message'])
 
     def _find_versions_with_zero_scans(self):
