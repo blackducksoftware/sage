@@ -73,6 +73,8 @@ jq 'keys' < sage_says.json
 
 Output from Sage can form the input to other tools. For instance, the list of unmapped scans can be fed into another program that reads the scan (aka code location) URL and performs a DELETE on it to delete the un-mapped scan (aka code location).
 
+You can also use https://viewer.dadroit.com/ tool for analysis of .JSON output.
+
 # Release History <a name=release-history />
 
 ## Jan, 2020
