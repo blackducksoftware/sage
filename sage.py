@@ -215,13 +215,18 @@ class BlackDuckSage(object):
                     high_freq_scans.append(scan)
         self.data['high_frequency_scans'] = high_freq_scans
 
-    def _calc_project_scan_size(self):
+    # Calculate the total scan size for all scans in each vesion and all versions in a project.
+    # Add 'scanSize' data to each project and version object with the results.
+    def _calc_scan_sizes(self):
         for p in self.data['projects']:
-            scan_size = 0
+            project_scan_size = 0
             for v in p['versions']:
+                version_scan_size=0
                 for scan in v['scans']:
-                    scan_size += scan['scanSize']
-            p['project_scan_size'] = scan_size
+                    version_scan_size += scan['scanSize']
+                v['scanSize'] = version_scan_size
+                project_scan_size += version_scan_size
+            p['scanSize'] = project_scan_size
 
     def _analyze_jobs(self):
         url = self.hub.get_apibase() + "/job-statistics"
@@ -235,7 +240,7 @@ class BlackDuckSage(object):
         self._get_data()
 
         logging.debug("Analyzing data")
-        self._calc_project_scan_size()
+        self._calc_scan_sizes()
         self._find_projects_with_too_many_versions()
         self._find_versions_with_too_many_scans()
         self._find_versions_with_zero_scans()
