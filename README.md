@@ -69,7 +69,6 @@ jq 'keys' < sage_says.json
  jq '.projects_with_too_many_versions' < sage_says.json # shows projects with > X versions
  jq '.total_unmapped_scans' < sage_says.json # show number of un-mapped scans
  jq '.unmapped_scans' < sage_says.json # show the list of un-mapped scans
- jq -r '.projects[] ^| .name + ", " + (.scanSize ^| tostring)' < sage_says.json > sizes.csv # generate a CSV list of projects with scan sizes.
 ```
 
 Output from Sage can form the input to other tools. For instance, the list of unmapped scans can be fed into another program that reads the scan (aka code location) URL and performs a DELETE on it to delete the un-mapped scan (aka code location).
