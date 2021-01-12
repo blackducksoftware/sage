@@ -229,7 +229,7 @@ class BlackDuckSage(object):
             p['scanSize'] = project_scan_size
 
     def _analyze_jobs(self):
-        url = self.hub.get_apibase() + "/job-statistics"
+        url = self.hub.get_apibase() + "/job-statistics?limit=999" # using limit 999 to ensure we get all job types
         response = self.hub.execute_get(url)
         job_statistics = response.json().get('items', [])
         self.data['job_statistics'] = job_statistics

@@ -36,6 +36,17 @@ python3 sage.py https://your-hub-dns {api-token}
 python3 sage.py https://your-hub-dns {api-token} -j # include jobs statistics
 ```
 
+## Using a Proxy
+
+Sage uses the blackduck PyPi library which, in turn, uses the Python requests library. The requests library supports use of proxies which can be configured via environment variables (see details at https://requests.readthedocs.io/en/master/user/advanced/), e.g.
+
+```
+$ export HTTP_PROXY="http://10.10.1.10:3128"
+$ export HTTPS_PROXY="http://10.10.1.10:1080"
+```
+
+## Output
+
 Analysis output is written, by default, to `/var/log/sage_says.json`. Use the -f option to specify a different path/filename to write the output into.
 
 What you can expect to get,
