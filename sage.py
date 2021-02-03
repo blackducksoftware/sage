@@ -128,7 +128,11 @@ class BlackDuckSage(object):
         logging.debug("Retrieving scans and scan summaries (aka scan history)")
         self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
         for scan in self.data['scans']:
-            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
+            try:
+                scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
+            except:
+                logging.warning(f"Unable to retrieve scan summaries for scan {scan['name']}", exc_info=True)
+                scan_summaries = []
             scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
