@@ -269,8 +269,13 @@ if __name__ == "__main__":
     from pprint import pprint
 
     parser = argparse.ArgumentParser("Sage, a program that looks at your Black Duck server and offers advice on how to get more value")
-    parser.add_argument("hub_url")
-    parser.add_argument("api_token")
+
+    parser.add_argument('hub_url', help="Hub server URL e.g. https://example.com");
+    parser.add_argument('api_token', nargs='?', default=None, help="API access token");
+
+    parser.add_argument('--api_token_file', dest='token_file', default=None, help="File containing access token");
+    parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME");
+    parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD");
 
     parser.add_argument(
         '-f', 
@@ -312,11 +317,33 @@ Resuming requires a previously saved file is present to read the current state o
 
     args = parser.parse_args()
 
+    create_config = False
+    if (create_config): logging.info("writing .restconfig.json upon successful authentication")
+
+    accept_self_signed = True
+    if (accept_self_signed): logging.info("accepting self-signed certificates in SSL connection")
+
+    hub = None
+    if (args.hub_url and args.username and args.password):
+        hub = HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
+    elif (args.hub_url and args.api_token):
+        token = args.api_token
+        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+    elif (args.hub_url and args.token_file):
+        f = open(args.token_file)
+        token = f.readline().strip()
+        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+    else:
+        if not os.path.exists(".restconfig.json"):
+            print("Error: authentication details not specified")
+            parser.print_help()
+            sys.exit(-1)
+        logging.info("reading authentication details from .restconfig.json")
+        hub = HubInstance()
+
     logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-    hub = HubInstance(args.hub_url, api_token = args.api_token, insecure=True, write_config_flag=False)
 
     sage = BlackDuckSage(
         hub, 

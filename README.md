@@ -20,7 +20,7 @@ Analyze usage of a Black Duck system and offer sage advice for how to improve us
 Sage uses:
 
 - Python3
-- An API token from your Black Duck server
+- Credentials or an API token from your Black Duck server
   - The user account this token is issued from needs to have visibility to all the projects, versions, and scans you want to analyze, e.g. has role 'Systemadmin', 'Super User', or 'Global Code Scanner'
 - Highly recommended: [virtualenv](https://virtualenv.pypa.io/en/latest/), [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/)
 
