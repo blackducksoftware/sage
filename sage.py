@@ -317,6 +317,10 @@ Resuming requires a previously saved file is present to read the current state o
 
     args = parser.parse_args()
 
+    logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
     create_config = False
     if (create_config): logging.info("writing .restconfig.json upon successful authentication")
 
@@ -340,10 +344,6 @@ Resuming requires a previously saved file is present to read the current state o
             sys.exit(-1)
         logging.info("reading authentication details from .restconfig.json")
         hub = HubInstance()
-
-    logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     sage = BlackDuckSage(
         hub, 
