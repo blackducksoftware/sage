@@ -205,7 +205,9 @@ class BlackDuckSage(object):
         high_freq_scans = []
         for scan in self.data['scans']:
             if scan.get('scan_summaries') and len(scan['scan_summaries']) > 1:
-                scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scan['scan_summaries']])
+                # found there can be scan summaries that don't have a createdAt so filter those out
+                scans_with_createdAt = list(filter(lambda s: 'createdAt' in s, scan['scan_summaries']))
+                scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scans_with_createdAt])
                 total_span_less_than_24h = (scan_create_dts[-1] - scan_create_dts[0]) < timedelta(days=1)
                 spans = [
                     scan_create_dts[i] - scan_create_dts[i-1] for i in range(1, len(scan_create_dts))
