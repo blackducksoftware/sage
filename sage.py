@@ -96,10 +96,40 @@ class BlackDuckSage(object):
     def _number_bom_scans(self, scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
+    def _get_code_locations(self, limit=100):
+        # loop to retreive all the code locations using offset, limit parms
+        scans = []
+
+        offset = 0
+        while True:
+            parameters = {'offset': offset, 'limit': limit}
+            logging.debug(f"Retrieving {limit} scans from offset {offset}")
+            more_scans = self.hub.get_codelocations(limit=limit, parameters=parameters).get('items', [])
+            scans.extend(more_scans)
+            if len(more_scans) < limit:
+                break
+            offset += limit
+        logging.debug(f"Retrieved {len(scans)} scans")
+        return scans
+
     def _get_data(self):
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
         '''
+        logging.debug("Retrieving scans and scan summaries (aka scan history)")
+        # self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
+
+        self.data['scans'] = self._get_code_locations(limit=1000)
+        logging.debug(f"Retrieving scan summaries for {len(self.data['scans'])} scans")
+        for scan in self.data['scans']:
+            try:
+                scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
+            except:
+                logging.warning(f"Unable to retrieve scan summaries for scan {scan['name']}")
+                scan_summaries = []
+            logging.debug(f"Retrieved {len(scan_summaries)} scan summary for scan {scan['name']}")
+            scan['scan_summaries'] = scan_summaries
+
         logging.debug('Retrieving projects')
         projects = self.hub.get_projects(limit=99999).get('items', [])
         total_versions = 0
@@ -124,16 +154,6 @@ class BlackDuckSage(object):
 
         logging.debug("Retrieving policies")
         self.data['policies'] = self.hub.get_policies(parameters={'limit':1000}).get('items', [])
-
-        logging.debug("Retrieving scans and scan summaries (aka scan history)")
-        self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
-        for scan in self.data['scans']:
-            try:
-                scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
-            except:
-                logging.warning(f"Unable to retrieve scan summaries for scan {scan['name']}", exc_info=True)
-                scan_summaries = []
-            scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
         self.data['total_versions'] = total_versions
