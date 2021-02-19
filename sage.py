@@ -14,7 +14,6 @@ from blackduck.HubRestApi import HubInstance
 # TODO: Find scans (code locations) whose scan frequency is higher than we recommend
 # TODO: Find signature scans taking a long time to complete (e.g. > 30m ) and suggest they be optimized, e.g. by splitting things up
 # TODO: Find signature scans that are particular large and should possibly be split up
-# TODO: Find projects that don't have any Released versions
 # TODO: Find Released versions that don't have any reports
 # TODO: Find projects that don't have an owner
 # TODO: Analyze versions and their reports to see if customer is using them
@@ -22,7 +21,7 @@ from blackduck.HubRestApi import HubInstance
 
 
 class BlackDuckSage(object):
-    VERSION="2.0"
+    VERSION="2.1"
     COMMON_ATTRIBUTES = [
         'name', 
         'versionName', 
@@ -163,7 +162,7 @@ class BlackDuckSage(object):
         self.data['projects_with_too_many_versions'] = list(filter(
             lambda p: p['num_versions'] > self.max_versions_per_project, self.data['projects']))
         for project in self.data['projects_with_too_many_versions']:
-            project['message'] = """Project {} has {} versions which is greater than
+            project['too_many_versions_message'] = """Project {} has {} versions which is greater than
                 the threshold of {}. You should review these versions and remove extraneous ones,
                 and their scans, to reclaim space and reduce clutter. Typically, there should be
                 one version per development branch, and one version per release. When new vulnerabilities are published you want
@@ -173,7 +172,17 @@ class BlackDuckSage(object):
                 Look at https://github.com/blackducksoftware/hub-rest-api-python/tree/master/examples for python examples
                 for finding/deleting/removing versions and their scans.""".format(project['name'], 
                     project['num_versions'], self.max_versions_per_project)
-            project['message'] = self._remove_white_space(project['message'])
+            project['too_many_versions_message'] = self._remove_white_space(project['too_many_versions_message'])
+
+    def _find_projects_without_an_owner(self):
+        self.data['projects_without_an_owner'] = list(filter(
+            lambda p: 'projectOwner' not in p, self.data['projects']))
+        for project in self.data['projects_without_an_owner']:
+            project['no_owner_message'] = """Project {} has no owner assigned. 
+                Assigning an owner is a good practice in case there are issues requiring their 
+                attention such as issues with their use of Black Duck or the presence of a critical
+                vulnerability or serious legal compliance issue.""".format(project['name'])
+            project['no_owner_message'] = self._remove_white_space(project['no_owner_message'])
 
     def _find_versions_with_too_many_scans(self):
         versions_with_too_many_scans = []
@@ -183,7 +192,7 @@ class BlackDuckSage(object):
                     p['versions'])))
         self.data['versions_with_too_many_scans'] = versions_with_too_many_scans
         for v in self.data['versions_with_too_many_scans']:
-            v['message'] = """Project {}, version {} has {} scans which is greater than 
+            v['too_many_scans_message'] = """Project {}, version {} has {} scans which is greater than 
                     the maximum recommended scans of {}. Review the scans to make sure there are not
                     redundant scans all mapped to this project version. Look for scans with similar names
                     or sizes. If redundant scans are found, you should delete them and update the scanning
@@ -195,7 +204,7 @@ class BlackDuckSage(object):
                     You should consider using {} to aggregate them into one scan which 
                     will reduce the processing load on the server and usually reduce the 
                     time it takes to complete the scan.""".format(v['num_bom_scans'], "--detect.bom.aggregate.name")
-            v['message'] = self._remove_white_space(v['message'])
+            v['too_many_scans_message'] = self._remove_white_space(v['too_many_scans_message'])
 
     def _find_versions_with_zero_scans(self):
         versions_with_no_scans = []
@@ -205,21 +214,21 @@ class BlackDuckSage(object):
                     p['versions'])))
         self.data['versions_with_zero_scans'] = versions_with_no_scans
         for v in self.data['versions_with_zero_scans']:
-            v['message'] = """Project {}, version {} has 0 scans. You should review this version and
+            v['zero_scans_message'] = """Project {}, version {} has 0 scans. You should review this version and
             delete it if it is not being used. One exception is if someone created this project-version
             to populate with components manually, i.e. no scans are mapped to it, but the BOM inside this
             version is populated by manually adding components to it.""".format(
                     v['project_name'], v['versionName'])
-            v['message'] = self._remove_white_space(v['message'])
+            v['zero_scans_message'] = self._remove_white_space(v['zero_scans_message'])
 
     def _find_unmapped_scans(self):
         self.data['unmapped_scans'] = list(filter(
             lambda s: s.get('mappedProjectVersion') == None, self.data['scans']))
         self.data['total_unmapped_scans'] = len(self.data['unmapped_scans'])
         for ums in self.data['unmapped_scans']:
-            ums['message'] = """This scan, {}, is not mapped to any project-version in the system. It should
+            ums['unmapped_scan_message'] = """This scan, {}, is not mapped to any project-version in the system. It should
                 either be mapped to something or deleted to reclaim space and reduce clutter.""".format(ums['name'])
-            ums['message'] = self._remove_white_space(ums['message'])
+            ums['unmapped_scan_message'] = self._remove_white_space(ums['unmapped_scan_message'])
 
     def _find_high_frequency_scans(self):
         high_freq_scans = []
@@ -234,10 +243,10 @@ class BlackDuckSage(object):
                 ]
                 any_span_less_than_24h = any([s < timedelta(days=1) for s in spans])
                 if any_span_less_than_24h or total_span_less_than_24h:
-                    scan['message'] = """This scan (aka code location) has two or more scans (out of {}) that
+                    scan['high_freq_scan_message'] = """This scan (aka code location) has two or more scans (out of {}) that
                         were run within 24 hours of each other which may indicate a scan that is being run too
                         often. Consider reducing the frequency to once per day.""".format(len(scan_create_dts))
-                    scan['message'] = self._remove_white_space(scan['message'])
+                    scan['high_freq_scan_message'] = self._remove_white_space(scan['high_freq_scan_message'])
                     high_freq_scans.append(scan)
         self.data['high_frequency_scans'] = high_freq_scans
 
@@ -268,6 +277,7 @@ class BlackDuckSage(object):
         logging.debug("Analyzing data")
         self._calc_scan_sizes()
         self._find_projects_with_too_many_versions()
+        self._find_projects_without_an_owner()
         self._find_versions_with_too_many_scans()
         self._find_versions_with_zero_scans()
         self._find_unmapped_scans()
