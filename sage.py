@@ -21,6 +21,35 @@ from blackduck.HubRestApi import HubInstance
 # TODO: Analyze global reports to see if customer is using them
 
 
+def authenticate_hub(args):
+    """As a function so that we can reinvoke to keep the bearer token from expiring"""
+
+    create_config = False
+    if (create_config): logging.info("writing .restconfig.json upon successful authentication")
+
+    accept_self_signed = True
+    if (accept_self_signed): logging.info("accepting self-signed certificates in SSL connection")
+
+    hub = None
+    if (args.hub_url and args.username and args.password):
+        hub = HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
+    elif (args.hub_url and args.api_token):
+        token = args.api_token
+        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+    elif (args.hub_url and args.token_file):
+        f = open(args.token_file)
+        token = f.readline().strip()
+        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+    else:
+        if not os.path.exists(".restconfig.json"):
+            print("Error: authentication details not specified")
+            parser.print_help()
+            sys.exit(-1)
+        logging.info("reading authentication details from .restconfig.json")
+        hub = HubInstance()
+    return hub
+
+
 class BlackDuckSage(object):
     VERSION="2.0"
     COMMON_ATTRIBUTES = [
@@ -97,6 +126,8 @@ class BlackDuckSage(object):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
     def _get_data(self):
+        last_authentication = datetime.now()
+
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
         '''
@@ -106,6 +137,12 @@ class BlackDuckSage(object):
         for project in projects:
             project_name = project['name']
             logging.debug("Retrieving versions for project {}".format(project_name))
+
+            if datetime.now() - last_authentication > timedelta(minutes=60):
+                logging.info("Re-authenticating to refresh the bearer token")
+                self.hub = authenticate_hub(args)
+                last_authentication = datetime.now()
+
             versions = self.hub.get_project_versions(project, limit=10000).get('items', [])
             for version in versions:
                 version_name = version['versionName']
@@ -128,11 +165,12 @@ class BlackDuckSage(object):
         logging.debug("Retrieving scans and scan summaries (aka scan history)")
         self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
         for scan in self.data['scans']:
-            try:
-                scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
-            except:
-                logging.warning(f"Unable to retrieve scan summaries for scan {scan['name']}", exc_info=True)
-                scan_summaries = []
+            if datetime.now() - last_authentication > timedelta(minutes=60):
+                logging.info("Re-authenticating to refresh the bearer token")
+                self.hub = authenticate_hub(args)
+                last_authentication = datetime.now()
+
+            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
             scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
@@ -323,29 +361,7 @@ Resuming requires a previously saved file is present to read the current state o
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    create_config = False
-    if (create_config): logging.info("writing .restconfig.json upon successful authentication")
-
-    accept_self_signed = True
-    if (accept_self_signed): logging.info("accepting self-signed certificates in SSL connection")
-
-    hub = None
-    if (args.hub_url and args.username and args.password):
-        hub = HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
-    elif (args.hub_url and args.api_token):
-        token = args.api_token
-        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
-    elif (args.hub_url and args.token_file):
-        f = open(args.token_file)
-        token = f.readline().strip()
-        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
-    else:
-        if not os.path.exists(".restconfig.json"):
-            print("Error: authentication details not specified")
-            parser.print_help()
-            sys.exit(-1)
-        logging.info("reading authentication details from .restconfig.json")
-        hub = HubInstance()
+    hub = authenticate_hub(args)
 
     sage = BlackDuckSage(
         hub, 
@@ -355,14 +371,4 @@ Resuming requires a previously saved file is present to read the current state o
         max_scans_per_version=args.max_scans_per_version,
         analyze_jobs = args.jobs)
     sage.analyze()
-
-
-
-
-
-
-
-
-
-
 
