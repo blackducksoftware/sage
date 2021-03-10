@@ -363,6 +363,12 @@ Resuming requires a previously saved file is present to read the current state o
 
     hub = authenticate_hub(args)
 
+    hub_25835_affected_versions = ['2020.08', '2020.10']
+    for h in hub_25835_affected_versions:
+        if hub.version_info['version'].startswith(h):
+            logging.warning("Scan summaries may be incomplete showing only 1 entry per codelocation (ref. HUB-25835)")
+            logging.warning("Affected Hub versions: %s", hub_25835_affected_versions)
+
     sage = BlackDuckSage(
         hub, 
         mode=args.mode,
