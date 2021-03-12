@@ -5,9 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
-import signal
 import sys
-import time
 
 from blackduck.HubRestApi import HubInstance
 
@@ -24,33 +22,33 @@ def authenticate_hub(args):
     """As a function so that we can reinvoke to keep the bearer token from expiring"""
 
     create_config = False
-    if (create_config): logging.info("writing .restconfig.json upon successful authentication")
+    if create_config:
+        logging.info("writing .restconfig.json upon successful authentication")
 
     accept_self_signed = True
-    if (accept_self_signed): logging.info("accepting self-signed certificates in SSL connection")
+    if accept_self_signed:
+        logging.info("accepting self-signed certificates in SSL connection")
 
-    hub = None
-    if (args.hub_url and args.username and args.password):
-        hub = HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
-    elif (args.hub_url and args.api_token):
+    if args.hub_url and args.username and args.password:
+        return HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
+    elif args.hub_url and args.api_token:
         token = args.api_token
-        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
-    elif (args.hub_url and args.token_file):
+        return HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+    elif args.hub_url and args.token_file:
         f = open(args.token_file)
         token = f.readline().strip()
-        hub = HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
+        return HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
     else:
         if not os.path.exists(".restconfig.json"):
             print("Error: authentication details not specified")
             parser.print_help()
             sys.exit(-1)
         logging.info("reading authentication details from .restconfig.json")
-        hub = HubInstance()
-    return hub
+        return HubInstance()
 
 
 class BlackDuckSage(object):
-    VERSION="2.1"
+    VERSION = "2.1"
     COMMON_ATTRIBUTES = [
         'name',
         'versionName',
@@ -91,12 +89,14 @@ class BlackDuckSage(object):
             if not os.access(self.file, os.W_OK):
                 raise PermissionError("Need write access to file {} in order to save the analysis results".format(self.file))
         else:
-            f = open(self.file, "w") # will fail if we don't have write permissions
+            open(self.file, "w")  # will fail if we don't have write permissions
 
-    def _remove_white_space(self, message):
+    @staticmethod
+    def _remove_white_space(message):
         return " ".join(message.split())
 
-    def _copy_common_attributes(self, obj, **kwargs):
+    @staticmethod
+    def _copy_common_attributes(obj, **kwargs):
         common_attribute_key_values = dict()
         for attr in BlackDuckSage.COMMON_ATTRIBUTES:
             if attr in obj:
@@ -104,7 +104,7 @@ class BlackDuckSage(object):
         common_attribute_key_values.update({
                 "url": obj['_meta']['href']
             })
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             common_attribute_key_values[k] = v
         return common_attribute_key_values
 
@@ -115,13 +115,16 @@ class BlackDuckSage(object):
 
         logging.info("Wrote results to {}".format(self.file))
 
-    def _is_signature_scan(self, scan_obj):
+    @staticmethod
+    def _is_signature_scan(scan_obj):
         return scan_obj['name'].lower().endswith("scan")
 
-    def _is_bom_scan(self, scan_obj):
-        return (scan_obj['name'].lower().endswith("bom") or scan_obj['name'].lower().endswith("black duck i/o export"))
+    @staticmethod
+    def _is_bom_scan(scan_obj):
+        return scan_obj['name'].lower().endswith("bom") or scan_obj['name'].lower().endswith("black duck i/o export")
 
-    def _number_bom_scans(self, scans):
+    @staticmethod
+    def _number_bom_scans(scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
     def _get_data(self):
@@ -169,7 +172,7 @@ class BlackDuckSage(object):
                 self.hub = authenticate_hub(args)
                 last_authentication = datetime.now()
 
-            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj = scan).get('items', [])
+            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj=scan).get('items', [])
             scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
@@ -188,8 +191,8 @@ class BlackDuckSage(object):
                 Keeping a large number of un-released versions in the system will make that difficult.
                 And accruing a large number of versions per project can lead to serious performance degradation.
                 Look at https://github.com/blackducksoftware/hub-rest-api-python/tree/master/examples for python examples
-                for finding/deleting/removing versions and their scans.""".format(project['name'],
-                    project['num_versions'], self.max_versions_per_project)
+                for finding/deleting/removing versions and their scans.""".format(
+                    project['name'], project['num_versions'], self.max_versions_per_project)
             project['too_many_versions_message'] = self._remove_white_space(project['too_many_versions_message'])
 
     def _find_projects_without_an_owner(self):
@@ -206,8 +209,7 @@ class BlackDuckSage(object):
         versions_with_too_many_scans = []
         for p in self.data['projects']:
             versions_with_too_many_scans.extend(
-                list(filter(lambda v: v['num_scans'] > self.max_scans_per_version,
-                    p['versions'])))
+                list(filter(lambda v1: v1['num_scans'] > self.max_scans_per_version, p['versions'])))
         self.data['versions_with_too_many_scans'] = versions_with_too_many_scans
         for v in self.data['versions_with_too_many_scans']:
             v['too_many_scans_message'] = """Project {}, version {} has {} scans which is greater than
@@ -216,7 +218,7 @@ class BlackDuckSage(object):
                     or sizes. If redundant scans are found, you should delete them and update the scanning
                     setup to use --detect.code.location.name with Synopsys detect to override scan names and
                     delete redundant scans.""".format(
-                    v['project_name'], v['versionName'], v['num_scans'], self.max_scans_per_version)
+                        v['project_name'], v['versionName'], v['num_scans'], self.max_scans_per_version)
             if v['num_bom_scans'] > self.max_scans_per_version:
                 v['too_many_scans_message'] += """There are {} BOM scans in this version.
                     You should consider using {} to aggregate them into one scan which
@@ -228,8 +230,7 @@ class BlackDuckSage(object):
         versions_with_no_scans = []
         for p in self.data['projects']:
             versions_with_no_scans.extend(
-                list(filter(lambda v: v['num_scans'] == 0,
-                    p['versions'])))
+                list(filter(lambda v1: v1['num_scans'] == 0, p['versions'])))
         self.data['versions_with_zero_scans'] = versions_with_no_scans
         for v in self.data['versions_with_zero_scans']:
             v['zero_scans_message'] = """Project {}, version {} has 0 scans. You should review this version and
@@ -241,7 +242,7 @@ class BlackDuckSage(object):
 
     def _find_unmapped_scans(self):
         self.data['unmapped_scans'] = list(filter(
-            lambda s: s.get('mappedProjectVersion') == None, self.data['scans']))
+            lambda s: s.get('mappedProjectVersion') is None, self.data['scans']))
         self.data['total_unmapped_scans'] = len(self.data['unmapped_scans'])
         for ums in self.data['unmapped_scans']:
             ums['unmapped_scan_message'] = """This scan, {}, is not mapped to any project-version in the system. It should
@@ -253,8 +254,8 @@ class BlackDuckSage(object):
         for scan in self.data['scans']:
             if scan.get('scan_summaries') and len(scan['scan_summaries']) > 1:
                 # found there can be scan summaries that don't have a createdAt so filter those out
-                scans_with_createdAt = list(filter(lambda s: 'createdAt' in s, scan['scan_summaries']))
-                scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scans_with_createdAt])
+                scans_with_created_at = list(filter(lambda s: 'createdAt' in s, scan['scan_summaries']))
+                scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scans_with_created_at])
                 total_span_less_than_24h = (scan_create_dts[-1] - scan_create_dts[0]) < timedelta(days=1)
                 spans = [
                     scan_create_dts[i] - scan_create_dts[i-1] for i in range(1, len(scan_create_dts))
@@ -268,13 +269,13 @@ class BlackDuckSage(object):
                     high_freq_scans.append(scan)
         self.data['high_frequency_scans'] = high_freq_scans
 
-    # Calculate the total scan size for all scans in each vesion and all versions in a project.
+    # Calculate the total scan size for all scans in each version and all versions in a project.
     # Add 'scanSize' data to each project and version object with the results.
     def _calc_scan_sizes(self):
         for p in self.data['projects']:
             project_scan_size = 0
             for v in p['versions']:
-                version_scan_size=0
+                version_scan_size = 0
                 for scan in v['scans']:
                     version_scan_size += scan['scanSize']
                 v['scanSize'] = version_scan_size
@@ -316,16 +317,14 @@ class BlackDuckSage(object):
 
 
 if __name__ == "__main__":
-    from pprint import pprint
-
     parser = argparse.ArgumentParser("Sage, a program that looks at your Black Duck server and offers advice on how to get more value")
 
-    parser.add_argument('hub_url', help="Hub server URL e.g. https://example.com");
-    parser.add_argument('api_token', nargs='?', default=None, help="API access token");
+    parser.add_argument('hub_url', help="Hub server URL e.g. https://example.com")
+    parser.add_argument('api_token', nargs='?', default=None, help="API access token")
 
-    parser.add_argument('--api_token_file', dest='token_file', default=None, help="File containing access token");
-    parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME");
-    parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD");
+    parser.add_argument('--api_token_file', dest='token_file', default=None, help="File containing access token")
+    parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME")
+    parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD")
 
     parser.add_argument(
         '-f',
