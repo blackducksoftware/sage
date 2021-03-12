@@ -52,22 +52,22 @@ def authenticate_hub(args):
 class BlackDuckSage(object):
     VERSION="2.1"
     COMMON_ATTRIBUTES = [
-        'name', 
-        'versionName', 
-        'createdAt', 
-        'createdBy', 
-        'distribution', 
+        'name',
+        'versionName',
+        'createdAt',
+        'createdBy',
+        'distribution',
         'mappedProjectVersion',
         'num_bom_scans',
         'num_scans',
         'num_versions',
-        'phase', 
+        'phase',
         'scans',
-        'scanSize', 
+        'scanSize',
         'scan_summaries',
         'settingUpdatedAt',
         'versions',
-        'updatedAt', 
+        'updatedAt',
         'updatedBy']
 
     def __init__(self, hub_instance, **kwargs):
@@ -77,9 +77,9 @@ class BlackDuckSage(object):
         self._check_file_permissions()
         self.max_versions_per_project = kwargs.get('max_versions_per_project', 20)
         self.max_scans_per_version = kwargs.get('max_scans_per_version', 10)
-        self.max_age_for_unmapped_scans = kwargs.get('max_age_unmapped_scans', 365) # days
-        self.min_time_between_versions = kwargs.get("min_time_between_versions", 1) # hour
-        self.min_ratio_of_released_versions = kwargs.get("min_ratio_of_released_versions", 0.1) # min ratio of RELEASED versions to the total
+        self.max_age_for_unmapped_scans = kwargs.get('max_age_unmapped_scans', 365)  # days
+        self.min_time_between_versions = kwargs.get("min_time_between_versions", 1)  # hour
+        self.min_ratio_of_released_versions = kwargs.get("min_ratio_of_released_versions", 0.1)  # min ratio of RELEASED versions to the total
         self.max_recommended_projects = int(kwargs.get("max_recommended_projects", 1000))
         self.max_time_to_retrieve_projects = int(kwargs.get("max_time_to_retrieve_projects", 60))
         self.analyze_jobs_flag = kwargs.get("analyze_jobs", True)
@@ -120,7 +120,7 @@ class BlackDuckSage(object):
 
     def _is_bom_scan(self, scan_obj):
         return (scan_obj['name'].lower().endswith("bom") or scan_obj['name'].lower().endswith("black duck i/o export"))
-        
+
     def _number_bom_scans(self, scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
@@ -159,7 +159,7 @@ class BlackDuckSage(object):
         self.data['projects'] = projects
 
         logging.debug("Retrieving policies")
-        self.data['policies'] = self.hub.get_policies(parameters={'limit':1000}).get('items', [])
+        self.data['policies'] = self.hub.get_policies(parameters={'limit': 1000}).get('items', [])
 
         logging.debug("Retrieving scans and scan summaries (aka scan history)")
         self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
@@ -214,7 +214,7 @@ class BlackDuckSage(object):
                     the maximum recommended scans of {}. Review the scans to make sure there are not
                     redundant scans all mapped to this project version. Look for scans with similar names
                     or sizes. If redundant scans are found, you should delete them and update the scanning
-                    setup to use --detect.code.location.name with Synopsys detect to override scan names and 
+                    setup to use --detect.code.location.name with Synopsys detect to override scan names and
                     delete redundant scans.""".format(
                     v['project_name'], v['versionName'], v['num_scans'], self.max_scans_per_version)
             if v['num_bom_scans'] > self.max_scans_per_version:
@@ -282,7 +282,7 @@ class BlackDuckSage(object):
             p['scanSize'] = project_scan_size
 
     def _analyze_jobs(self):
-        url = self.hub.get_apibase() + "/job-statistics?limit=999" # using limit 999 to ensure we get all job types
+        url = self.hub.get_apibase() + "/job-statistics?limit=999"  # using limit 999 to ensure we get all job types
         response = self.hub.execute_get(url)
         job_statistics = response.json().get('items', [])
         self.data['job_statistics'] = job_statistics
@@ -328,9 +328,9 @@ if __name__ == "__main__":
     parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD");
 
     parser.add_argument(
-        '-f', 
-        "--file", 
-        default="/var/log/sage_says.json", 
+        '-f',
+        "--file",
+        default="/var/log/sage_says.json",
         help="Change the name sage writes results into (default: sage_says.json")
 
     parser.add_argument(
@@ -340,27 +340,27 @@ if __name__ == "__main__":
         help="Include this flag if you want to try to collect and analyze jobs info")
 
     parser.add_argument(
-        "-m", 
-        "--mode", 
+        "-m",
+        "--mode",
         choices=["new", "resume"],
         default="new",
-        help="""Set to 'resume' to resume analysis or to 'new' to start new (default). 
+        help="""Set to 'resume' to resume analysis or to 'new' to start new (default).
 Resuming requires a previously saved file is present to read the current state of analysis. 'New' will overwrite the analysis file.""")
 
-    default_max_versions_per_project=20
+    default_max_versions_per_project = 20
     parser.add_argument(
-        "-vp", 
-        "--max_versions_per_project", 
-        default=default_max_versions_per_project, 
+        "-vp",
+        "--max_versions_per_project",
+        default=default_max_versions_per_project,
         type=int,
         help="Set max_versions_per_project to catch any projects having more than max_versions_per_project (default: {})".format(
             default_max_versions_per_project))
 
-    default_max_scans_per_version=10
+    default_max_scans_per_version = 10
     parser.add_argument(
-        "-sv", 
-        "--max_scans_per_version", 
-        default=default_max_scans_per_version, 
+        "-sv",
+        "--max_scans_per_version",
+        default=default_max_scans_per_version,
         type=int,
         help="Set max_scans to catch any project-versions with more than max_scans (default: {})".format(
             default_max_scans_per_version))
@@ -380,11 +380,10 @@ Resuming requires a previously saved file is present to read the current state o
             logging.warning("Affected Hub versions: %s", hub_25835_affected_versions)
 
     sage = BlackDuckSage(
-        hub, 
+        hub,
         mode=args.mode,
         file=args.file,
         max_versions_per_project=args.max_versions_per_project,
         max_scans_per_version=args.max_scans_per_version,
-        analyze_jobs = args.jobs)
+        analyze_jobs=args.jobs)
     sage.analyze()
-
