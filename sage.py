@@ -256,6 +256,8 @@ class BlackDuckSage(object):
                 # found there can be scan summaries that don't have a createdAt so filter those out
                 scans_with_created_at = list(filter(lambda s: 'createdAt' in s, scan['scan_summaries']))
                 scan_create_dts = sorted([dt_parser.parse(s['createdAt']) for s in scans_with_created_at])
+                if len(scan_create_dts) < 2:
+                    continue
                 total_span_less_than_24h = (scan_create_dts[-1] - scan_create_dts[0]) < timedelta(days=1)
                 spans = [
                     scan_create_dts[i] - scan_create_dts[i-1] for i in range(1, len(scan_create_dts))
