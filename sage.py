@@ -192,6 +192,12 @@ class BlackDuckSage(object):
         headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
         return self._get_all_items(url, 100, headers)
 
+    def _get_all_job_statistics(self):
+        # This endpoint is not in the REST API docs with 2021.2 but it still works
+        url = self.hub.get_urlbase() + "/api/job-statistics"
+        headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
+        return self._get_all_items(url, 100, headers, progress_info=True)
+
     def _get_data(self):
         last_authentication = datetime.now()
 
@@ -369,9 +375,9 @@ class BlackDuckSage(object):
             p['scanSize'] = project_scan_size
 
     def _analyze_jobs(self):
-        url = self.hub.get_apibase() + "/job-statistics?limit=999"  # using limit 999 to ensure we get all job types
-        response = self.hub.execute_get(url)
-        job_statistics = response.json().get('items', [])
+        logging.info("Fetching job statistics...")
+        job_statistics = self._get_all_job_statistics()
+        logging.info("Fetched %i job statistics", len(job_statistics))
         self.data['job_statistics'] = job_statistics
 
     def analyze(self):
