@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 
 from blackduck.HubRestApi import HubInstance
@@ -127,6 +128,69 @@ class BlackDuckSage(object):
     def _number_bom_scans(scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
+    def _checked_execute_get(self, url, additional_headers):
+        response = self.hub.execute_get(url, additional_headers)
+        response.raise_for_status()
+        try:
+            json_result = response.json()
+            return json_result
+        except json.decoder.JSONDecodeError:
+            logging.exception("Caught unexpected JSONDecodeError")
+            logging.error("HTTP response status code %i", response.status_code)
+            logging.error("HTTP response headers: %s", response.headers)
+            logging.error("HTTP response text: %s", response.text)
+            raise
+
+    def _get_all_items(self, endpoint, pagesize, additional_headers):
+        """Fetch all items from endpoint using pagination"""
+        logging.debug("Fetching items from %s...", endpoint)
+        all_items = []
+        offset = 0
+        while True:
+            url = endpoint + "?offset={}&limit={}".format(offset, pagesize)
+            json_result = self._checked_execute_get(url, additional_headers)
+            items = json_result.get('items', [])
+            logging.debug("  %i at offset %i", len(items), offset)
+            all_items.extend(items)
+            if len(items) < pagesize:
+                break
+            offset += pagesize
+
+        logging.debug("Fetched %i items", len(all_items))
+        return all_items
+
+    def _get_all_projects(self):
+        url = self.hub.get_urlbase() + "/api/projects"
+        headers = {'accept': "application/vnd.blackducksoftware.project-detail-4+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_project_versions(self, project_id):
+        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions"
+        headers = {'accept': "application/vnd.blackducksoftware.project-detail-5+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_project_version_codelocations(self, project_id, version_id):
+        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions/{version_id}/codelocations"
+        # note using key 'accept' does not work with 2020.12
+        headers = {'content-type': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_codelocations(self):
+        url = self.hub.get_urlbase() + "/api/codelocations"
+        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_policies(self):
+        url = self.hub.get_urlbase() + "/api/policy-rules"
+        # note using key 'content-type' does not work with 2020.12
+        headers = {'accept': "application/vnd.blackducksoftware.policy-5+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_codelocation_summaries(self, codelocation_id):
+        url = self.hub.get_urlbase() + f"/api/codelocations/{codelocation_id}/scan-summaries"
+        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers)
+
     def _get_data(self):
         last_authentication = datetime.now()
 
@@ -134,9 +198,11 @@ class BlackDuckSage(object):
         subsequent analysis.
         '''
         logging.debug('Retrieving projects')
-        projects = self.hub.get_projects(limit=99999).get('items', [])
+        projects = self._get_all_projects()
         total_versions = 0
         for project in projects:
+            m = re.match(r".*/projects/(.*)", project['_meta']['href'])
+            project_id = m.group(1)
             project_name = project['name']
             logging.debug("Retrieving versions for project {}".format(project_name))
 
@@ -145,11 +211,14 @@ class BlackDuckSage(object):
                 self.hub = authenticate_hub(args)
                 last_authentication = datetime.now()
 
-            versions = self.hub.get_project_versions(project, limit=10000).get('items', [])
+            versions = self._get_all_project_versions(project_id)
             for version in versions:
+                m = re.match(r".*/projects/(.*)/versions/(.*)", version['_meta']['href'])
+                project_id = m.group(1)
+                version_id = m.group(2)
                 version_name = version['versionName']
                 logging.debug("Retrieving scans for version {}".format(version_name))
-                scans = self.hub.get_version_codelocations(version, limit=1000).get('items', [])
+                scans = self._get_all_project_version_codelocations(project_id, version_id)
                 scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
                 version['scans'] = scans
                 version['num_bom_scans'] = self._number_bom_scans(scans)
@@ -162,17 +231,20 @@ class BlackDuckSage(object):
         self.data['projects'] = projects
 
         logging.debug("Retrieving policies")
-        self.data['policies'] = self.hub.get_policies(parameters={'limit': 1000}).get('items', [])
+        self.data['policies'] = self._get_all_policies()
 
         logging.debug("Retrieving scans and scan summaries (aka scan history)")
-        self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
+        self.data['scans'] = self._get_all_codelocations()
         for scan in self.data['scans']:
+            m = re.match(r".*/codelocations/(.*)", scan['_meta']['href'])
+            codelocation_id = m.group(1)
+
             if datetime.now() - last_authentication > timedelta(minutes=60):
                 logging.info("Re-authenticating to refresh the bearer token")
                 self.hub = authenticate_hub(args)
                 last_authentication = datetime.now()
 
-            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj=scan).get('items', [])
+            scan_summaries = self._get_all_codelocation_summaries(codelocation_id)
             scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
