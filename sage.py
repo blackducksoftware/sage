@@ -200,6 +200,7 @@ class BlackDuckSage(object):
 
     def _get_data(self):
         last_authentication = datetime.now()
+        start_time = datetime.now()
 
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
@@ -268,6 +269,8 @@ class BlackDuckSage(object):
         self.data['total_projects'] = len(projects)
         self.data['total_versions'] = total_versions
         self.data['total_scans'] = len(self.data['scans'])
+
+        logging.info("Elapsed time to get data: %s", datetime.now() - start_time)
 
     def _find_projects_with_too_many_versions(self):
         self.data['projects_with_too_many_versions'] = list(filter(
