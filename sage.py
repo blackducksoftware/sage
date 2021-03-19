@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 
 from blackduck.HubRestApi import HubInstance
@@ -110,7 +111,7 @@ class BlackDuckSage(object):
 
     def _write_results(self):
         with open(self.file, 'w') as f:
-            logging.debug("Writing results to {}".format(self.file))
+            logging.info("Writing results to {}".format(self.file))
             f.write(json.dumps(self.data))
 
         logging.info("Wrote results to {}".format(self.file))
@@ -127,29 +128,109 @@ class BlackDuckSage(object):
     def _number_bom_scans(scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
+    def _checked_execute_get(self, url, additional_headers):
+        response = self.hub.execute_get(url, additional_headers)
+        response.raise_for_status()
+        try:
+            json_result = response.json()
+            return json_result
+        except json.decoder.JSONDecodeError:
+            logging.exception("Caught unexpected JSONDecodeError")
+            logging.error("HTTP response status code %i", response.status_code)
+            logging.error("HTTP response headers: %s", response.headers)
+            logging.error("HTTP response text: %s", response.text)
+            raise
+
+    def _get_all_items(self, endpoint, pagesize, additional_headers, progress_info=False):
+        """Fetch all items from endpoint using pagination"""
+        level = logging.INFO if progress_info else logging.DEBUG
+        logging.debug("Fetching items from %s...", endpoint)
+        all_items = []
+        offset = 0
+        while True:
+            url = endpoint + "?offset={}&limit={}".format(offset, pagesize)
+            json_result = self._checked_execute_get(url, additional_headers)
+            items = json_result.get('items', [])
+            logging.log(level, "  %i at offset %i", len(items), offset)
+            all_items.extend(items)
+            if len(items) < pagesize:
+                break
+            offset += pagesize
+
+        logging.debug("Fetched %i items", len(all_items))
+        return all_items
+
+    def _get_all_projects(self):
+        url = self.hub.get_urlbase() + "/api/projects"
+        headers = {'accept': "application/vnd.blackducksoftware.project-detail-4+json"}
+        return self._get_all_items(url, 100, headers, progress_info=True)
+
+    def _get_all_project_versions(self, project_id):
+        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions"
+        headers = {'accept': "application/vnd.blackducksoftware.project-detail-5+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_project_version_codelocations(self, project_id, version_id):
+        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions/{version_id}/codelocations"
+        # note using key 'accept' does not work with 2020.12
+        headers = {'content-type': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_codelocations(self):
+        url = self.hub.get_urlbase() + "/api/codelocations"
+        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers, progress_info=True)
+
+    def _get_all_policies(self):
+        url = self.hub.get_urlbase() + "/api/policy-rules"
+        # note using key 'content-type' does not work with 2020.12
+        headers = {'accept': "application/vnd.blackducksoftware.policy-5+json"}
+        return self._get_all_items(url, 100, headers, progress_info=True)
+
+    def _get_all_codelocation_summaries(self, codelocation_id):
+        url = self.hub.get_urlbase() + f"/api/codelocations/{codelocation_id}/scan-summaries"
+        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
+        return self._get_all_items(url, 100, headers)
+
+    def _get_all_job_statistics(self):
+        # This endpoint is not in the REST API docs with 2021.2 but it still works
+        url = self.hub.get_urlbase() + "/api/job-statistics"
+        headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
+        return self._get_all_items(url, 100, headers, progress_info=True)
+
     def _get_data(self):
         last_authentication = datetime.now()
 
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
         '''
-        logging.debug('Retrieving projects')
-        projects = self.hub.get_projects(limit=99999).get('items', [])
+        logging.info("Fetching projects...")
+        projects = self._get_all_projects()
+        logging.info("Fetched %i projects", len(projects))
         total_versions = 0
+        project_count = 0
         for project in projects:
+            project_count += 1
+            m = re.match(r".*/projects/(.*)", project['_meta']['href'])
+            project_id = m.group(1)
             project_name = project['name']
-            logging.debug("Retrieving versions for project {}".format(project_name))
+            print("Project ({}/{}): {};  versions:".format(project_count, len(projects), project_name), end='', flush=True)
 
             if datetime.now() - last_authentication > timedelta(minutes=60):
                 logging.info("Re-authenticating to refresh the bearer token")
                 self.hub = authenticate_hub(args)
                 last_authentication = datetime.now()
 
-            versions = self.hub.get_project_versions(project, limit=10000).get('items', [])
+            versions = self._get_all_project_versions(project_id)
+            print(len(versions))
             for version in versions:
+                m = re.match(r".*/projects/(.*)/versions/(.*)", version['_meta']['href'])
+                project_id = m.group(1)
+                version_id = m.group(2)
                 version_name = version['versionName']
-                logging.debug("Retrieving scans for version {}".format(version_name))
-                scans = self.hub.get_version_codelocations(version, limit=1000).get('items', [])
+                print("  {};  codelocations:".format(version_name), end='', flush=True)
+                scans = self._get_all_project_version_codelocations(project_id, version_id)
+                print(len(scans))
                 scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
                 version['scans'] = scans
                 version['num_bom_scans'] = self._number_bom_scans(scans)
@@ -161,18 +242,27 @@ class BlackDuckSage(object):
         projects = [self._copy_common_attributes(p) for p in projects]
         self.data['projects'] = projects
 
-        logging.debug("Retrieving policies")
-        self.data['policies'] = self.hub.get_policies(parameters={'limit': 1000}).get('items', [])
+        logging.info("Fetching policies...")
+        self.data['policies'] = self._get_all_policies()
+        logging.info("Fetched %i policies", len(self.data['policies']))
 
-        logging.debug("Retrieving scans and scan summaries (aka scan history)")
-        self.data['scans'] = self.hub.get_codelocations(limit=99999).get('items', [])
+        logging.info("Fetching codelocations...")
+        self.data['scans'] = self._get_all_codelocations()
+        logging.info("Fetched %i codelocations", len(self.data['scans']))
+        codelocation_count = 0
         for scan in self.data['scans']:
+            codelocation_count += 1
+            m = re.match(r".*/codelocations/(.*)", scan['_meta']['href'])
+            codelocation_id = m.group(1)
+
             if datetime.now() - last_authentication > timedelta(minutes=60):
                 logging.info("Re-authenticating to refresh the bearer token")
                 self.hub = authenticate_hub(args)
                 last_authentication = datetime.now()
 
-            scan_summaries = self.hub.get_codelocation_scan_summaries(code_location_obj=scan).get('items', [])
+            print("Codelocation ({}/{}): {};  scan-summaries:".format(codelocation_count, len(self.data['scans']), scan['name']), end='', flush=True)
+            scan_summaries = self._get_all_codelocation_summaries(codelocation_id)
+            print(len(scan_summaries))
             scan['scan_summaries'] = scan_summaries
 
         self.data['total_projects'] = len(projects)
@@ -285,9 +375,9 @@ class BlackDuckSage(object):
             p['scanSize'] = project_scan_size
 
     def _analyze_jobs(self):
-        url = self.hub.get_apibase() + "/job-statistics?limit=999"  # using limit 999 to ensure we get all job types
-        response = self.hub.execute_get(url)
-        job_statistics = response.json().get('items', [])
+        logging.info("Fetching job statistics...")
+        job_statistics = self._get_all_job_statistics()
+        logging.info("Fetched %i job statistics", len(job_statistics))
         self.data['job_statistics'] = job_statistics
 
     def analyze(self):
@@ -295,7 +385,7 @@ class BlackDuckSage(object):
         self.data["time_of_analysis"] = datetime.now().isoformat()
         self._get_data()
 
-        logging.debug("Analyzing data")
+        logging.info("Analyzing data")
         self._calc_scan_sizes()
         self._find_projects_with_too_many_versions()
         self._find_projects_without_an_owner()
@@ -368,7 +458,7 @@ Resuming requires a previously saved file is present to read the current state o
 
     args = parser.parse_args()
 
-    logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', stream=sys.stderr, level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s:%(levelname)s: %(message)s', stream=sys.stdout, level=logging.INFO)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
