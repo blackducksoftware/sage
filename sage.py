@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import sys
 
-from blackduck.HubRestApi import HubInstance
+from hubcore import HubCore
 
 # TODO: Find scans (code locations) whose scan frequency is higher than we recommend
 # TODO: Find signature scans taking a long time to complete (e.g. > 30m ) and suggest they be optimized, e.g. by splitting things up
@@ -17,35 +17,6 @@ from blackduck.HubRestApi import HubInstance
 # TODO: Find Released versions that don't have any reports
 # TODO: Analyze versions and their reports to see if customer is using them
 # TODO: Analyze global reports to see if customer is using them
-
-
-def authenticate_hub(args):
-    """As a function so that we can reinvoke to keep the bearer token from expiring"""
-
-    create_config = False
-    if create_config:
-        logging.info("writing .restconfig.json upon successful authentication")
-
-    accept_self_signed = True
-    if accept_self_signed:
-        logging.info("accepting self-signed certificates in SSL connection")
-
-    if args.hub_url and args.username and args.password:
-        return HubInstance(args.hub_url, args.username, args.password, write_config_flag=create_config, insecure=accept_self_signed)
-    elif args.hub_url and args.api_token:
-        token = args.api_token
-        return HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
-    elif args.hub_url and args.token_file:
-        f = open(args.token_file)
-        token = f.readline().strip()
-        return HubInstance(args.hub_url, api_token=token, write_config_flag=create_config, insecure=accept_self_signed)
-    else:
-        if not os.path.exists(".restconfig.json"):
-            print("Error: authentication details not specified")
-            parser.print_help()
-            sys.exit(-1)
-        logging.info("reading authentication details from .restconfig.json")
-        return HubInstance()
 
 
 class BlackDuckSage(object):
@@ -70,7 +41,7 @@ class BlackDuckSage(object):
         'updatedBy']
 
     def __init__(self, hub_instance, **kwargs):
-        assert isinstance(hub_instance, HubInstance)
+        assert isinstance(hub_instance, HubCore)
         self.hub = hub_instance
         self.file = kwargs.get("file", "/var/log/sage_says.json")
         self._check_file_permissions()
@@ -129,24 +100,10 @@ class BlackDuckSage(object):
     def _number_bom_scans(scans):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
-    def _checked_execute_get(self, url, additional_headers):
-        if datetime.now() - self.last_authentication > timedelta(minutes=60):
-            print()
-            logging.info("Re-authenticating to refresh the bearer token")
-            self.hub = authenticate_hub(args)
-            self.last_authentication = datetime.now()
-
-        response = self.hub.execute_get(url, additional_headers)
-        response.raise_for_status()
-        try:
-            json_result = response.json()
-            return json_result
-        except json.decoder.JSONDecodeError:
-            logging.exception("Caught unexpected JSONDecodeError")
-            logging.error("HTTP response status code %i", response.status_code)
-            logging.error("HTTP response headers: %s", response.headers)
-            logging.error("HTTP response text: %s", response.text)
-            raise
+    @staticmethod
+    def get_hub_version_info():
+        headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
+        return hub.execute_get("/api/current-version", headers=headers)
 
     def _get_all_items(self, endpoint, pagesize, additional_headers, progress_info=False):
         """Fetch all items from endpoint using pagination"""
@@ -156,7 +113,7 @@ class BlackDuckSage(object):
         offset = 0
         while True:
             url = endpoint + "?offset={}&limit={}".format(offset, pagesize)
-            json_result = self._checked_execute_get(url, additional_headers)
+            json_result = self.hub.execute_get(url, headers=additional_headers)
             items = json_result.get('items', [])
             logging.log(level, "  %i at offset %i", len(items), offset)
             all_items.extend(items)
@@ -168,17 +125,17 @@ class BlackDuckSage(object):
         return all_items
 
     def _get_all_projects(self):
-        url = self.hub.get_urlbase() + "/api/projects"
+        url = "/api/projects"
         headers = {'accept': "application/vnd.blackducksoftware.project-detail-4+json"}
         return self._get_all_items(url, 100, headers, progress_info=True)
 
     def _get_all_project_versions(self, project_id):
-        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions"
+        url = f"/api/projects/{project_id}/versions"
         headers = {'accept': "application/vnd.blackducksoftware.project-detail-5+json"}
         return self._get_all_items(url, 100, headers)
 
     def _get_all_project_version_codelocations(self, project_id, version_id):
-        url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions/{version_id}/codelocations"
+        url = f"/api/projects/{project_id}/versions/{version_id}/codelocations"
         # Using key 'accept' on its own returns http response status code 406 on 2020.12, 2020.2
         # Using key 'content-type' on its own will actually use the internal proprietary content-type:
         #   application/vnd.blackducksoftware.internal-1+json.
@@ -188,24 +145,24 @@ class BlackDuckSage(object):
         return self._get_all_items(url, 100, headers)
 
     def _get_all_codelocations(self):
-        url = self.hub.get_urlbase() + "/api/codelocations"
+        url = "/api/codelocations"
         headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
         return self._get_all_items(url, 100, headers, progress_info=True)
 
     def _get_all_policies(self):
-        url = self.hub.get_urlbase() + "/api/policy-rules"
+        url = "/api/policy-rules"
         # note using key 'content-type' does not work with 2020.12
         headers = {'accept': "application/vnd.blackducksoftware.policy-5+json"}
         return self._get_all_items(url, 100, headers, progress_info=True)
 
     def _get_all_codelocation_summaries(self, codelocation_id):
-        url = self.hub.get_urlbase() + f"/api/codelocations/{codelocation_id}/scan-summaries"
+        url = f"/api/codelocations/{codelocation_id}/scan-summaries"
         headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
         return self._get_all_items(url, 100, headers)
 
     def _get_all_job_statistics(self):
         # This endpoint is not in the REST API docs with 2021.2 but it still works
-        url = self.hub.get_urlbase() + "/api/job-statistics"
+        url = "/api/job-statistics"
         headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
         return self._get_all_items(url, 100, headers, progress_info=True)
 
@@ -401,8 +358,8 @@ class BlackDuckSage(object):
         self.data['number_bom_scans'] = len(list(filter(
             lambda s: self._is_bom_scan(s), self.data['scans'])))
 
-        self.data["hub_url"] = self.hub.get_urlbase()
-        self.data["hub_version"] = self.hub.version_info
+        self.data["hub_url"] = self.hub.session.urlbase
+        self.data["hub_version"] = self.get_hub_version_info()
 
         if self.analyze_jobs_flag:
             self._analyze_jobs()
@@ -463,11 +420,16 @@ Resuming requires a previously saved file is present to read the current state o
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    hub = authenticate_hub(args)
+    hub = HubCore(args.hub_url,
+                  access_token=args.api_token, access_token_file=args.token_file, username=args.username, password=args.password,
+                  timeout=15,  # timeout in seconds
+                  verify=False  # server's TLS certificate
+                  )
 
     hub_25835_affected_versions = ['2020.8', '2020.10']
+    hub_version_info = BlackDuckSage.get_hub_version_info()
     for h in hub_25835_affected_versions:
-        if hub.version_info['version'].startswith(h):
+        if hub_version_info['version'].startswith(h):
             logging.warning("Scan summaries may be incomplete showing only 1 entry per codelocation (ref. HUB-25835)")
             logging.warning("Affected Hub versions: %s", hub_25835_affected_versions)
 
