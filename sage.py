@@ -179,8 +179,12 @@ class BlackDuckSage(object):
 
     def _get_all_project_version_codelocations(self, project_id, version_id):
         url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions/{version_id}/codelocations"
-        # note using key 'accept' does not work with 2020.12
-        headers = {'content-type': "application/vnd.blackducksoftware.scan-4+json"}
+        # Using key 'accept' on its own returns http response status code 406 on 2020.12, 2020.2
+        # Using key 'content-type' on its own will actually use the internal proprietary content-type:
+        #   application/vnd.blackducksoftware.internal-1+json.
+        # So we need both.
+        headers = {'accept': "application/json",
+                   'content-type': "application/vnd.blackducksoftware.scan-4+json"}
         return self._get_all_items(url, 100, headers)
 
     def _get_all_codelocations(self):
