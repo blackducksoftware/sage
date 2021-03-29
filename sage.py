@@ -375,6 +375,10 @@ if __name__ == "__main__":
     parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME")
     parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD")
 
+    parser.add_argument('--timeout', dest='timeout', default=15.0, help="Connection timeout in seconds")
+    parser.add_argument('--retries', dest='retries', default=3, help="Maximum number of retries for a single request")
+
+
     parser.add_argument(
         '-f',
         "--file",
@@ -421,7 +425,7 @@ Resuming requires a previously saved file is present to read the current state o
 
     hub = HubCore(args.hub_url,
                   access_token=args.api_token, access_token_file=args.token_file, username=args.username, password=args.password,
-                  timeout=15,  # timeout in seconds
+                  timeout=args.timeout, retries=args.retries,
                   verify=False  # server's TLS certificate
                   )
 

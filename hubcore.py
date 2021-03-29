@@ -124,12 +124,12 @@ class HubAuthPassword(HubAuth):
 
 
 class HubSession(requests.Session):
-    """Hold urlbase, timeout, and provide sensible defaults"""
+    """Hold urlbase, timeout, retries, and provide sensible defaults"""
 
-    def __init__(self, urlbase, timeout, verify):
+    def __init__(self, urlbase, timeout, retries, verify):
         super().__init__()
         self.urlbase = urlbase
-        self._timeout = timeout  # timeout is not a member of requests.Session
+        self._timeout = float(timeout)  # timeout is not a member of requests.Session
         self.verify = verify
 
         # use sane defaults to handle unreliable networks
@@ -141,7 +141,7 @@ class HubSession(requests.Session):
                 504 = Gateway Timeout
         """
         retry_strategy = Retry(
-            total=3,
+            total=int(retries),
             backoff_factor=2,  # exponential retry 1, 2, 4, 8, 16 sec ...
             status_forcelist=[429, 500, 502, 503, 504],
             method_whitelist=['GET']
@@ -169,15 +169,16 @@ class HubCore:
 
        and provide a robust underlying connection:
        - reuse a single requests.Session
-       - retries, timeouts, and proxies
+       - timeouts, retries, and proxies
        - TLS certificate verification (or lack of)
     """
     def __init__(self, urlbase,
                  access_token=None, access_token_file=None, username=None, password=None,
-                 timeout=None, verify=None):
+                 timeout=None, retries=None, verify=None):
         """Specify named parameters instead of **kwargs to make them more apparent"""
-        self.session = HubSession(urlbase, timeout, verify)
-        session_for_authenticating = HubSession(urlbase, timeout, verify)  # with no auth attached
+        logging.info("Using a session with a %s second timeout and up to %s retries per request", timeout, retries)
+        self.session = HubSession(urlbase, timeout, retries, verify)
+        session_for_authenticating = HubSession(urlbase, timeout, retries, verify)  # with no auth attached
         self.session.auth = self.__get_authenticator(session_for_authenticating, access_token, access_token_file, username, password)
 
     @staticmethod
