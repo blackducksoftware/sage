@@ -45,7 +45,6 @@ class BlackDuckSage(object):
         self.hub = hub_instance
         self.file = kwargs.get("file", "/var/log/sage_says.json")
         self._check_file_permissions()
-        self.last_authentication = datetime.now()
         self.max_versions_per_project = kwargs.get('max_versions_per_project', 20)
         self.max_scans_per_version = kwargs.get('max_scans_per_version', 10)
         self.max_age_for_unmapped_scans = kwargs.get('max_age_unmapped_scans', 365)  # days
