@@ -20,7 +20,7 @@ from hubcore import HubCore
 
 
 class BlackDuckSage(object):
-    VERSION = "2.1"
+    VERSION = "2.2"
     COMMON_ATTRIBUTES = [
         'name',
         'versionName',
