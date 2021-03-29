@@ -74,6 +74,7 @@ class BlackDuckSage(object):
         self.hub = hub_instance
         self.file = kwargs.get("file", "/var/log/sage_says.json")
         self._check_file_permissions()
+        self.last_authentication = datetime.now()
         self.max_versions_per_project = kwargs.get('max_versions_per_project', 20)
         self.max_scans_per_version = kwargs.get('max_scans_per_version', 10)
         self.max_age_for_unmapped_scans = kwargs.get('max_age_unmapped_scans', 365)  # days
@@ -129,6 +130,12 @@ class BlackDuckSage(object):
         return len(list(filter(lambda s: s['name'].lower().endswith('bom'), scans)))
 
     def _checked_execute_get(self, url, additional_headers):
+        if datetime.now() - self.last_authentication > timedelta(minutes=60):
+            print()
+            logging.info("Re-authenticating to refresh the bearer token")
+            self.hub = authenticate_hub(args)
+            self.last_authentication = datetime.now()
+
         response = self.hub.execute_get(url, additional_headers)
         response.raise_for_status()
         try:
@@ -172,8 +179,12 @@ class BlackDuckSage(object):
 
     def _get_all_project_version_codelocations(self, project_id, version_id):
         url = self.hub.get_urlbase() + f"/api/projects/{project_id}/versions/{version_id}/codelocations"
-        # note using key 'accept' does not work with 2020.12
-        headers = {'content-type': "application/vnd.blackducksoftware.scan-4+json"}
+        # Using key 'accept' on its own returns http response status code 406 on 2020.12, 2020.2
+        # Using key 'content-type' on its own will actually use the internal proprietary content-type:
+        #   application/vnd.blackducksoftware.internal-1+json.
+        # So we need both.
+        headers = {'accept': "application/json",
+                   'content-type': "application/vnd.blackducksoftware.scan-4+json"}
         return self._get_all_items(url, 100, headers)
 
     def _get_all_codelocations(self):
@@ -199,7 +210,7 @@ class BlackDuckSage(object):
         return self._get_all_items(url, 100, headers, progress_info=True)
 
     def _get_data(self):
-        last_authentication = datetime.now()
+        start_time = datetime.now()
 
         '''Retrieve all the projects, versions, and scans and put them into self.data for
         subsequent analysis.
@@ -215,12 +226,6 @@ class BlackDuckSage(object):
             project_id = m.group(1)
             project_name = project['name']
             print("Project ({}/{}): {};  versions:".format(project_count, len(projects), project_name), end='', flush=True)
-
-            if datetime.now() - last_authentication > timedelta(minutes=60):
-                logging.info("Re-authenticating to refresh the bearer token")
-                self.hub = authenticate_hub(args)
-                last_authentication = datetime.now()
-
             versions = self._get_all_project_versions(project_id)
             print(len(versions))
             for version in versions:
@@ -254,12 +259,6 @@ class BlackDuckSage(object):
             codelocation_count += 1
             m = re.match(r".*/codelocations/(.*)", scan['_meta']['href'])
             codelocation_id = m.group(1)
-
-            if datetime.now() - last_authentication > timedelta(minutes=60):
-                logging.info("Re-authenticating to refresh the bearer token")
-                self.hub = authenticate_hub(args)
-                last_authentication = datetime.now()
-
             print("Codelocation ({}/{}): {};  scan-summaries:".format(codelocation_count, len(self.data['scans']), scan['name']), end='', flush=True)
             scan_summaries = self._get_all_codelocation_summaries(codelocation_id)
             print(len(scan_summaries))
@@ -268,6 +267,8 @@ class BlackDuckSage(object):
         self.data['total_projects'] = len(projects)
         self.data['total_versions'] = total_versions
         self.data['total_scans'] = len(self.data['scans'])
+
+        logging.info("Elapsed time to get data: %s", datetime.now() - start_time)
 
     def _find_projects_with_too_many_versions(self):
         self.data['projects_with_too_many_versions'] = list(filter(
