@@ -21,7 +21,7 @@ Sage uses:
 
 - Python3
 - Credentials or an API token from your Black Duck server
-  - The user account this token is issued from needs to have visibility to all the projects, versions, and scans you want to analyze, e.g. has role 'Systemadmin', 'Super User', or 'Global Code Scanner'
+  - The associated user account needs to have visibility to all the projects, versions, and scans you want to analyze, e.g. has role 'System Administrator', 'Super User', or 'Global Code Scanner'
 - Highly recommended: [virtualenv](https://virtualenv.pypa.io/en/latest/), [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/)
 
 Sage produces analysis output in json format so it's easy to read (using a tool like jq) and it's easy to use as input to the other tools which might want to act on the information.
@@ -52,7 +52,7 @@ Analysis output is written, by default, to `/var/log/sage_says.json`. Use the -f
 What you can expect to get,
 
 ```json
-jq 'keys' < sage_says.json 
+jq 'keys' < sage_says.json
 [
   "hub_url",
   "hub_version",
@@ -85,18 +85,37 @@ jq 'keys' < sage_says.json
 
 Output from Sage can form the input to other tools. For instance, the list of unmapped scans can be fed into another program that reads the scan (aka code location) URL and performs a DELETE on it to delete the un-mapped scan (aka code location).
 
-You can also use https://viewer.dadroit.com/ tool for analysis of .JSON output.
+You can also use https://viewer.dadroit.com tool for analysis of .JSON output.
 
 # Release History <a name=release-history />
 
+## Mar, 2021
+
+Version 2.2
+
+- Robustness and performance improvements by utilizing the same requests.Session
+- retries, timeouts (default 3 retries, 15 sec timeout)
+- allow password in addition to access token authentication
+- bearer token auto-renewal to allow > 2h running time
+- fetch entities through pagination instead of hard-coded limits
+- added elapsed time
+- output warning about incomplete scan-summaries with 2020.8 and 2020.10
+- identify projects without an owner
+
+Bugs fixed:
+- crash with missing createdAt or updatedAt
+- crash with spans with < 2 elements
+- analysis output messages no longer overwrite each other
+
+
 ## Jan, 2020
 
-Version 2.0. 
+Version 2.0
 
 - Refactored the code to make it simpler, easier to maintain and test
 - Added unit tests using pytest
-- Adding more metadata, e.g. 
-  - total scans 
+- Adding more metadata, e.g.
+  - total scans
   - total scan size (for all signature scans)
   - total projects
   - total versions
@@ -109,8 +128,3 @@ Adding more fine-grained analysis of projects
 ## March 3, 2019
 
 Added job information
-
-
-
-
-
