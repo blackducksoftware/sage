@@ -200,8 +200,8 @@ class HubCore:
         response = self.session.get(url, **kwargs)
         response.raise_for_status()
 
-        if 'internal' in response.headers['content-type']:
-            logging.warning("Response contains internal proprietary content-type: " + response.headers['content-type'])
+        if 'internal' in response.headers['Content-Type']:
+            logging.warning("Response contains internal proprietary Content-Type: " + response.headers['Content-Type'])
 
         try:
             json_result = response.json()
