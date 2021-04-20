@@ -1,4 +1,7 @@
 import argparse
+from blackduck import Client
+from blackduck.Client import HubSession
+from blackduck.Authentication import BearerAuth, CookieAuth
 from datetime import datetime, timedelta
 from dateutil import parser as dt_parser
 import json
@@ -7,8 +10,6 @@ import os
 from pathlib import Path
 import re
 import sys
-
-from hubcore import HubCore
 
 # TODO: Find scans (code locations) whose scan frequency is higher than we recommend
 # TODO: Find signature scans taking a long time to complete (e.g. > 30m ) and suggest they be optimized, e.g. by splitting things up
@@ -41,7 +42,7 @@ class BlackDuckSage(object):
         'updatedBy']
 
     def __init__(self, hub_instance, **kwargs):
-        assert isinstance(hub_instance, HubCore)
+        assert isinstance(hub_instance, Client)
         self.hub = hub_instance
         self.file = kwargs.get("file", "/var/log/sage_says.json")
         self._check_file_permissions()
@@ -102,36 +103,17 @@ class BlackDuckSage(object):
     @staticmethod
     def get_hub_version_info():
         headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
-        return hub.execute_get("/api/current-version", headers=headers)
-
-    def _get_all_items(self, endpoint, pagesize, additional_headers, progress_info=False):
-        """Fetch all items from endpoint using pagination"""
-        level = logging.INFO if progress_info else logging.DEBUG
-        logging.debug("Fetching items from %s...", endpoint)
-        all_items = []
-        offset = 0
-        while True:
-            url = endpoint + "?offset={}&limit={}".format(offset, pagesize)
-            json_result = self.hub.execute_get(url, headers=additional_headers)
-            items = json_result.get('items', [])
-            logging.log(level, "  %i at offset %i", len(items), offset)
-            all_items.extend(items)
-            if len(items) < pagesize:
-                break
-            offset += pagesize
-
-        logging.debug("Fetched %i items", len(all_items))
-        return all_items
+        return hub.get_json("/api/current-version", headers=headers)
 
     def _get_all_projects(self):
         url = "/api/projects"
         headers = {'accept': "application/vnd.blackducksoftware.project-detail-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_project_versions(self, project_id):
         url = f"/api/projects/{project_id}/versions"
         headers = {'accept': "application/vnd.blackducksoftware.project-detail-5+json"}
-        return self._get_all_items(url, 100, headers)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_project_version_codelocations(self, project_id, version_id):
         url = f"/api/projects/{project_id}/versions/{version_id}/codelocations"
@@ -141,29 +123,29 @@ class BlackDuckSage(object):
         # So we need both.
         headers = {'accept': "application/json",
                    'content-type': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_codelocations(self):
         url = "/api/codelocations"
         headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_policies(self):
         url = "/api/policy-rules"
         # note using key 'content-type' does not work with 2020.12
         headers = {'accept': "application/vnd.blackducksoftware.policy-5+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_codelocation_summaries(self, codelocation_id):
         url = f"/api/codelocations/{codelocation_id}/scan-summaries"
         headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_all_job_statistics(self):
         # This endpoint is not in the REST API docs with 2021.2 but it still works
         url = "/api/job-statistics"
         headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
+        return list(self.hub.get_items(url, headers=headers))
 
     def _get_data(self):
         start_time = datetime.now()
@@ -357,7 +339,7 @@ class BlackDuckSage(object):
         self.data['number_bom_scans'] = len(list(filter(
             lambda s: self._is_bom_scan(s), self.data['scans'])))
 
-        self.data["hub_url"] = self.hub.session.urlbase
+        self.data["hub_url"] = self.hub.base_url
         self.data["hub_version"] = self.get_hub_version_info()
 
         if self.analyze_jobs_flag:
@@ -377,7 +359,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--timeout', dest='timeout', default=15.0, help="Connection timeout in seconds")
     parser.add_argument('--retries', dest='retries', default=3, help="Maximum number of retries for a single request")
-
 
     parser.add_argument(
         '-f',
@@ -419,15 +400,30 @@ Resuming requires a previously saved file is present to read the current state o
 
     args = parser.parse_args()
 
-    logging.basicConfig(format='%(asctime)s:%(levelname)s: %(message)s', stream=sys.stdout, level=logging.INFO)
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="[%(asctime)s] {%(module)s:%(lineno)d} %(levelname)s: %(message)s"
+    )
 
-    hub = HubCore(args.hub_url,
-                  access_token=args.api_token, access_token_file=args.token_file, username=args.username, password=args.password,
-                  timeout=args.timeout, retries=args.retries,
-                  verify=False  # server's TLS certificate
-                  )
+    base_url = args.hub_url
+    verify = False  # TLS certificate verification
+    session = HubSession(base_url, timeout=args.timeout, retries=args.retries, verify=verify)
+
+    # De-tangle the possibilities of specifying credentials
+    if args.api_token:
+        access_token = args.api_token
+        auth = BearerAuth(session, access_token)
+    elif args.token_file:
+        tf = open(args.token_file, 'r')
+        access_token = tf.readline().strip()
+        auth = BearerAuth(session, access_token)
+    elif args.username and args.password:
+        auth = CookieAuth(session, args.username, args.password)
+    else:
+        raise SystemError("Authentication credentials not specified")
+
+    hub = Client(base_url=base_url, session=session, auth=auth)
 
     hub_25835_affected_versions = ['2020.8', '2020.10']
     hub_version_info = BlackDuckSage.get_hub_version_info()
