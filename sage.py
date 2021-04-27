@@ -20,7 +20,7 @@ import sys
 
 
 class BlackDuckSage(object):
-    VERSION = "2.3"
+    VERSION = "2.3.1"
     COMMON_ATTRIBUTES = [
         'baseDirectory',
         'createdAt',
@@ -37,6 +37,7 @@ class BlackDuckSage(object):
         'num_scans',
         'num_versions',
         'phase',
+        'projectOwner',
         'scans',
         'scanSize',
         'scanType',

@@ -129,6 +129,13 @@ def process_project_version(project, version):
     sys.stdout.write(str(num_components))
     sys.stdout.flush()
 
+    # projectOwner
+    project_owner = ""
+    if 'projectOwner' in project:
+        url = project['projectOwner']
+        owner_dict = bd.get_json(url)
+        project_owner = owner_dict['userName']
+
     # Look at project version codelocations as it is possible
     # to have mapped scan results but no history within the events
     sum_scanSize = 0
@@ -189,6 +196,7 @@ def process_project_version(project, version):
             versionId,
             project['name'],
             version['versionName'],
+            project_owner,
             version['distribution'],
             version['phase'],
             version['createdAt'],
@@ -270,6 +278,7 @@ if __name__ == '__main__':
             'versionId',
             'project',
             'version',
+            'projectOwner',
             'distribution',
             'phase',
             'createdAt',
