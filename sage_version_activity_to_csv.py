@@ -167,10 +167,17 @@ def process_project_version(project, version):
     # Look at event history for activity
     sys.stdout.write(";  events:")
     sys.stdout.flush()
-    logging.debug("Fetching events...")
+
+    # There is a very nasty bug in the REST-API for this endpoint where if I return all the
+    # results using a small page size it returns the correct number but overall incorrect results
+    # with occasional duplicate keys.  However, if I use a page size large enough to get everything in
+    # one go it fetches the results correctly.
+    #
+    # Passing a sort by timestamp ASC via params makes a multiple page fetch behave correctly.
     url = f"/api/journal/projects/{projectId}/versions/{versionId}"
-    events = list(bd.get_items(url, page_size=1000))
-    logging.debug("Fetched %i events", len(events))
+    params = {'sort': "timestamp ASC"}
+    events = list(bd.get_items(url, page_size=1000, params=params))
+
     sys.stdout.write(str(len(events)))
 
     activity = check_for_activity(events)
