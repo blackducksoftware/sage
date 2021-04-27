@@ -1,14 +1,14 @@
 import argparse
+from blackduck import Client
+from blackduck.Client import HubSession
+from blackduck.Authentication import BearerAuth, CookieAuth
 from datetime import datetime, timedelta
 from dateutil import parser as dt_parser
 import json
 import logging
 import os
 from pathlib import Path
-import re
 import sys
-
-from hubcore import HubCore
 
 # TODO: Find scans (code locations) whose scan frequency is higher than we recommend
 # TODO: Find signature scans taking a long time to complete (e.g. > 30m ) and suggest they be optimized, e.g. by splitting things up
@@ -20,28 +20,39 @@ from hubcore import HubCore
 
 
 class BlackDuckSage(object):
-    VERSION = "2.2"
+    VERSION = "2.3"
     COMMON_ATTRIBUTES = [
-        'name',
-        'versionName',
+        'baseDirectory',
         'createdAt',
         'createdBy',
+        'createdByUserName',
+        'directoryCount',
         'distribution',
+        'fileCount',
+        'hostName',
         'mappedProjectVersion',
+        'matchCount',
+        'name',
         'num_bom_scans',
         'num_scans',
         'num_versions',
         'phase',
         'scans',
         'scanSize',
+        'scanType',
         'scan_summaries',
+        'serverVersion',
         'settingUpdatedAt',
-        'versions',
+        'status',
+        'statusMessage',
         'updatedAt',
-        'updatedBy']
+        'updatedBy',
+        'versionName',
+        'versions',
+    ]
 
     def __init__(self, hub_instance, **kwargs):
-        assert isinstance(hub_instance, HubCore)
+        assert isinstance(hub_instance, Client)
         self.hub = hub_instance
         self.file = kwargs.get("file", "/var/log/sage_says.json")
         self._check_file_permissions()
@@ -102,68 +113,7 @@ class BlackDuckSage(object):
     @staticmethod
     def get_hub_version_info():
         headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
-        return hub.execute_get("/api/current-version", headers=headers)
-
-    def _get_all_items(self, endpoint, pagesize, additional_headers, progress_info=False):
-        """Fetch all items from endpoint using pagination"""
-        level = logging.INFO if progress_info else logging.DEBUG
-        logging.debug("Fetching items from %s...", endpoint)
-        all_items = []
-        offset = 0
-        while True:
-            url = endpoint + "?offset={}&limit={}".format(offset, pagesize)
-            json_result = self.hub.execute_get(url, headers=additional_headers)
-            items = json_result.get('items', [])
-            logging.log(level, "  %i at offset %i", len(items), offset)
-            all_items.extend(items)
-            if len(items) < pagesize:
-                break
-            offset += pagesize
-
-        logging.debug("Fetched %i items", len(all_items))
-        return all_items
-
-    def _get_all_projects(self):
-        url = "/api/projects"
-        headers = {'accept': "application/vnd.blackducksoftware.project-detail-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
-
-    def _get_all_project_versions(self, project_id):
-        url = f"/api/projects/{project_id}/versions"
-        headers = {'accept': "application/vnd.blackducksoftware.project-detail-5+json"}
-        return self._get_all_items(url, 100, headers)
-
-    def _get_all_project_version_codelocations(self, project_id, version_id):
-        url = f"/api/projects/{project_id}/versions/{version_id}/codelocations"
-        # Using key 'accept' on its own returns http response status code 406 on 2020.12, 2020.2
-        # Using key 'content-type' on its own will actually use the internal proprietary content-type:
-        #   application/vnd.blackducksoftware.internal-1+json.
-        # So we need both.
-        headers = {'accept': "application/json",
-                   'content-type': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers)
-
-    def _get_all_codelocations(self):
-        url = "/api/codelocations"
-        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
-
-    def _get_all_policies(self):
-        url = "/api/policy-rules"
-        # note using key 'content-type' does not work with 2020.12
-        headers = {'accept': "application/vnd.blackducksoftware.policy-5+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
-
-    def _get_all_codelocation_summaries(self, codelocation_id):
-        url = f"/api/codelocations/{codelocation_id}/scan-summaries"
-        headers = {'accept': "application/vnd.blackducksoftware.scan-4+json"}
-        return self._get_all_items(url, 100, headers)
-
-    def _get_all_job_statistics(self):
-        # This endpoint is not in the REST API docs with 2021.2 but it still works
-        url = "/api/job-statistics"
-        headers = {'accept': "application/vnd.blackducksoftware.status-4+json"}
-        return self._get_all_items(url, 100, headers, progress_info=True)
+        return hub.get_json("/api/current-version", headers=headers)
 
     def _get_data(self):
         start_time = datetime.now()
@@ -172,25 +122,26 @@ class BlackDuckSage(object):
         subsequent analysis.
         '''
         logging.info("Fetching projects...")
-        projects = self._get_all_projects()
+        projects = list(hub.get_resource('projects', headers={'accept': "application/vnd.blackducksoftware.project-detail-4+json"}))
         logging.info("Fetched %i projects", len(projects))
         total_versions = 0
         project_count = 0
         for project in projects:
             project_count += 1
-            m = re.match(r".*/projects/(.*)", project['_meta']['href'])
-            project_id = m.group(1)
             project_name = project['name']
             print("Project ({}/{}): {};  versions:".format(project_count, len(projects), project_name), end='', flush=True)
-            versions = self._get_all_project_versions(project_id)
+            versions = list(hub.get_resource('versions', project, headers={'accept': "application/vnd.blackducksoftware.project-detail-5+json"}))
             print(len(versions))
             for version in versions:
-                m = re.match(r".*/projects/(.*)/versions/(.*)", version['_meta']['href'])
-                project_id = m.group(1)
-                version_id = m.group(2)
                 version_name = version['versionName']
                 print("  {};  codelocations:".format(version_name), end='', flush=True)
-                scans = self._get_all_project_version_codelocations(project_id, version_id)
+                # Using key 'accept' on its own returns http response status code 406 on 2020.12, 2020.2
+                # Using key 'content-type' on its own will actually use the internal proprietary content-type:
+                #   application/vnd.blackducksoftware.internal-1+json.
+                # So we need both.
+                headers = {'accept': "application/json",
+                           'content-type': "application/vnd.blackducksoftware.scan-4+json"}
+                scans = list(hub.get_resource('codelocations', version, headers=headers))
                 print(len(scans))
                 scans = [self._copy_common_attributes(s, version_name=version_name, project_name=project_name) for s in scans]
                 version['scans'] = scans
@@ -204,21 +155,23 @@ class BlackDuckSage(object):
         self.data['projects'] = projects
 
         logging.info("Fetching policies...")
-        self.data['policies'] = self._get_all_policies()
+        # note using key 'content-type' does not work with 2020.12
+        self.data['policies'] = list(hub.get_resource('policyRules', headers={'accept': "application/vnd.blackducksoftware.policy-5+json"}))
         logging.info("Fetched %i policies", len(self.data['policies']))
 
         logging.info("Fetching codelocations...")
-        self.data['scans'] = self._get_all_codelocations()
-        logging.info("Fetched %i codelocations", len(self.data['scans']))
+        scans = list(hub.get_resource('codeLocations', headers={'accept': "application/vnd.blackducksoftware.scan-4+json"}))
+        logging.info("Fetched %i codelocations", len(scans))
         codelocation_count = 0
-        for scan in self.data['scans']:
+        for scan in scans:
             codelocation_count += 1
-            m = re.match(r".*/codelocations/(.*)", scan['_meta']['href'])
-            codelocation_id = m.group(1)
-            print("Codelocation ({}/{}): {};  scan-summaries:".format(codelocation_count, len(self.data['scans']), scan['name']), end='', flush=True)
-            scan_summaries = self._get_all_codelocation_summaries(codelocation_id)
+            print("Codelocation ({}/{}): {};  scan-summaries:".format(codelocation_count, len(scans), scan['name']), end='', flush=True)
+            scan_summaries = list(hub.get_resource('scans', scan, headers={'accept': "application/vnd.blackducksoftware.scan-4+json"}))
             print(len(scan_summaries))
+            scan_summaries = [self._copy_common_attributes(ss) for ss in scan_summaries]
             scan['scan_summaries'] = scan_summaries
+        scans = [self._copy_common_attributes(s) for s in scans]
+        self.data['scans'] = scans
 
         self.data['total_projects'] = len(projects)
         self.data['total_versions'] = total_versions
@@ -333,7 +286,9 @@ class BlackDuckSage(object):
 
     def _analyze_jobs(self):
         logging.info("Fetching job statistics...")
-        job_statistics = self._get_all_job_statistics()
+        # This endpoint is not in the REST API docs with 2021.2 but it still works
+        url = "/api/job-statistics"
+        job_statistics = list(hub.get_items(url, headers={'accept': "application/vnd.blackducksoftware.status-4+json"}))
         logging.info("Fetched %i job statistics", len(job_statistics))
         self.data['job_statistics'] = job_statistics
 
@@ -357,7 +312,7 @@ class BlackDuckSage(object):
         self.data['number_bom_scans'] = len(list(filter(
             lambda s: self._is_bom_scan(s), self.data['scans'])))
 
-        self.data["hub_url"] = self.hub.session.urlbase
+        self.data["hub_url"] = self.hub.base_url
         self.data["hub_version"] = self.get_hub_version_info()
 
         if self.analyze_jobs_flag:
@@ -377,7 +332,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--timeout', dest='timeout', default=15.0, help="Connection timeout in seconds")
     parser.add_argument('--retries', dest='retries', default=3, help="Maximum number of retries for a single request")
-
 
     parser.add_argument(
         '-f',
@@ -419,15 +373,30 @@ Resuming requires a previously saved file is present to read the current state o
 
     args = parser.parse_args()
 
-    logging.basicConfig(format='%(asctime)s:%(levelname)s: %(message)s', stream=sys.stdout, level=logging.INFO)
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stdout,
+        format="[%(asctime)s] {%(module)s:%(lineno)d} %(levelname)s: %(message)s"
+    )
 
-    hub = HubCore(args.hub_url,
-                  access_token=args.api_token, access_token_file=args.token_file, username=args.username, password=args.password,
-                  timeout=args.timeout, retries=args.retries,
-                  verify=False  # server's TLS certificate
-                  )
+    base_url = args.hub_url
+    verify = False  # TLS certificate verification
+    session = HubSession(base_url, timeout=args.timeout, retries=args.retries, verify=verify)
+
+    # De-tangle the possibilities of specifying credentials
+    if args.api_token:
+        access_token = args.api_token
+        auth = BearerAuth(session, access_token)
+    elif args.token_file:
+        tf = open(args.token_file, 'r')
+        access_token = tf.readline().strip()
+        auth = BearerAuth(session, access_token)
+    elif args.username and args.password:
+        auth = CookieAuth(session, args.username, args.password)
+    else:
+        raise SystemError("Authentication credentials not specified")
+
+    hub = Client(base_url=base_url, session=session, auth=auth)
 
     hub_25835_affected_versions = ['2020.8', '2020.10']
     hub_version_info = BlackDuckSage.get_hub_version_info()

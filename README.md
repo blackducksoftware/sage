@@ -89,9 +89,14 @@ You can also use https://viewer.dadroit.com tool for analysis of .JSON output.
 
 # Release History <a name=release-history />
 
-## Mar, 2021
+## Version 2.3
+2021-04-27
 
-Version 2.2
+- Refactor to use new Client from hub-rest-api-python
+- Copy common attributes for scan summaries
+
+## Version 2.2
+2021-04-12
 
 - Robustness and performance improvements by utilizing the same requests.Session
 - retries, timeouts (default 3 retries, 15 sec timeout)
@@ -108,9 +113,8 @@ Bugs fixed:
 - analysis output messages no longer overwrite each other
 
 
-## Jan, 2020
-
-Version 2.0
+## Version 2.0
+2020-02-14
 
 - Refactored the code to make it simpler, easier to maintain and test
 - Added unit tests using pytest
