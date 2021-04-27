@@ -20,25 +20,36 @@ import sys
 
 
 class BlackDuckSage(object):
-    VERSION = "2.2"
+    VERSION = "2.3"
     COMMON_ATTRIBUTES = [
-        'name',
-        'versionName',
+        'baseDirectory',
         'createdAt',
         'createdBy',
+        'createdByUserName',
+        'directoryCount',
         'distribution',
+        'fileCount',
+        'hostName',
         'mappedProjectVersion',
+        'matchCount',
+        'name',
         'num_bom_scans',
         'num_scans',
         'num_versions',
         'phase',
         'scans',
         'scanSize',
+        'scanType',
         'scan_summaries',
+        'serverVersion',
         'settingUpdatedAt',
-        'versions',
+        'status',
+        'statusMessage',
         'updatedAt',
-        'updatedBy']
+        'updatedBy',
+        'versionName',
+        'versions',
+    ]
 
     def __init__(self, hub_instance, **kwargs):
         assert isinstance(hub_instance, Client)
@@ -156,9 +167,10 @@ class BlackDuckSage(object):
             codelocation_count += 1
             print("Codelocation ({}/{}): {};  scan-summaries:".format(codelocation_count, len(scans), scan['name']), end='', flush=True)
             scan_summaries = list(hub.get_resource('scans', scan, headers={'accept': "application/vnd.blackducksoftware.scan-4+json"}))
-            scan.pop('_hub_rest_api_python_resources_dict', None)  # TODO: prefer to _copy_common_attributes
             print(len(scan_summaries))
+            scan_summaries = [self._copy_common_attributes(ss) for ss in scan_summaries]
             scan['scan_summaries'] = scan_summaries
+        scans = [self._copy_common_attributes(s) for s in scans]
         self.data['scans'] = scans
 
         self.data['total_projects'] = len(projects)

@@ -1,4 +1,4 @@
-blackduck >= 1.0.0
+blackduck >= 1.0.2
 python-dateutil >= 2.8.0
 requests >= 2.20.0
 
