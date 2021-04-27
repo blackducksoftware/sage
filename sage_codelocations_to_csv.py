@@ -142,7 +142,7 @@ if __name__ == '__main__':
                 latest_summary_hostName = summary['hostName']
                 latest_summary_baseDirectory = summary['baseDirectory']
 
-        m = re.match(r".*/codelocations/(.*)", codelocation['_meta']['href'])
+        m = re.match(r".*/codelocations/(.*)", codelocation['url'])
         codelocationId = m.group(1)
 
         row = [codelocationId,
