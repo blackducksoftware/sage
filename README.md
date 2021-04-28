@@ -89,6 +89,13 @@ You can also use https://viewer.dadroit.com tool for analysis of .JSON output.
 
 # Release History <a name=release-history />
 
+## Version 2.3.1
+2021-04-28
+
+- Add projectOwner
+- Add project version activity to csv script
+- Add filter activity script
+
 ## Version 2.3
 2021-04-27
 
