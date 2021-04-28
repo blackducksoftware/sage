@@ -140,7 +140,7 @@ if __name__ == '__main__':
                 latest_summary_scanType = summary['scanType']
                 latest_summary_matchCount = summary['matchCount']
                 latest_summary_hostName = summary['hostName']
-                latest_summary_baseDirectory = summary['baseDirectory']
+                latest_summary_baseDirectory = summary['baseDirectory'] if 'baseDirectory' in summary else ""
 
         m = re.match(r".*/codelocations/(.*)", codelocation['url'])
         codelocationId = m.group(1)
