@@ -103,18 +103,17 @@ def check_for_activity(events):
         else:
             notableCounts[compositeKey] = 1
 
-    resultDict = {}
-    resultDict['events'] = len(events)
-    resultDict['latestScanTimestamp'] = latestScanTimestamp
-    resultDict['rescanned'] = rescanned
-    resultDict['latestNotableTimestamp'] = latestNotableTimestamp
-    resultDict['notableCounts'] = notableCounts
+    resultDict = {'events': len(events),
+                  'latestScanTimestamp': latestScanTimestamp,
+                  'rescanned': rescanned,
+                  'latestNotableTimestamp': latestNotableTimestamp,
+                  'notableCounts': notableCounts}
 
     return resultDict
 
 
 def sizeof_fmt(num, suffix='B'):
-    for unit in ['','K','M','G','T','P','E','Z']:
+    for unit in ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z']:
         if abs(num) < 1024.0:
             return "%3.2f %s%s" % (num, unit, suffix)
         num /= 1024.0
@@ -148,11 +147,7 @@ def process_project_version(project, version):
     sum_summaries = 0
     latest_summary_timestamp = None
 
-    sys.stdout.write(";  codelocations:")
-    sys.stdout.flush()
     codelocations = version['scans']
-    sys.stdout.write(str(len(codelocations)))
-    sys.stdout.flush()
     for codelocation in codelocations:
         m = re.match(r".*/codelocations/(.*)", codelocation['url'])
         codelocationId = m.group(1)
@@ -163,7 +158,6 @@ def process_project_version(project, version):
         sum_summaries += len(summaries)
 
         for summary in summaries:
-            ts = None
             if 'createdAt' in summary:
                 ts = summary['createdAt']
             elif 'updatedAt' in summary:
@@ -310,9 +304,6 @@ if __name__ == '__main__':
 
         versions = pvDict[projectId]
         for version in versions:
-            m = re.match(r".*/projects/(.*)/versions/(.*)", version['url'])
-            versionId = m.group(2)
-
             row = process_project_version(project, version)
             w.writerow(row)
             f.flush()  # allow tail -f csv file
