@@ -5,7 +5,7 @@
 import argparse
 from blackduck import Client
 import csv
-import datetime
+from datetime import datetime
 from dateutil.parser import isoparse
 import json
 import logging
@@ -62,7 +62,7 @@ def check_for_activity(events):
             scanEvents += 1
             if not latestScanTimestamp:
                 latestScanTimestamp = event['timestamp']
-            if isoparse(event['timestamp']) - isoparse(latestScanTimestamp) > datetime.timedelta():
+            if isoparse(event['timestamp']) > isoparse(latestScanTimestamp):
                 latestScanTimestamp = event['timestamp']
 
         # high frequency scanning is best checked from codelocations instead of project versions
@@ -95,7 +95,7 @@ def check_for_activity(events):
 
         if not latestNotableTimestamp:
             latestNotableTimestamp = event['timestamp']
-        if isoparse(event['timestamp']) - isoparse(latestNotableTimestamp) > datetime.timedelta():
+        if isoparse(event['timestamp']) > isoparse(latestNotableTimestamp):
             latestNotableTimestamp = event['timestamp']
 
         if compositeKey in notableCounts:
@@ -168,7 +168,7 @@ def process_project_version(project, version):
                 continue
             if not latest_summary_timestamp:
                 latest_summary_timestamp = ts
-            if isoparse(ts) - isoparse(latest_summary_timestamp) > datetime.timedelta():
+            if isoparse(ts) > isoparse(latest_summary_timestamp):
                 latest_summary_timestamp = ts
 
     # Look at event history for activity
@@ -267,6 +267,7 @@ if __name__ == '__main__':
         codelocationsDict[codelocationId] = codelocation
 
     # Process project versions
+    start_time = datetime.now()
     logging.info("Loading project versions complete, now processing each and every project version")
 
     f = open(args.csv_file_output, 'w', newline='', encoding='utf-8')
@@ -310,5 +311,6 @@ if __name__ == '__main__':
             pvCount += 1
 
     logging.info("Processing %i project versions complete, output written to: %s", pvCount, args.csv_file_output)
+    logging.info("Elapsed time: %s", datetime.now() - start_time)
 
     sys.exit(0)
