@@ -225,16 +225,15 @@ def process_project_version(project, version):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process Sage project versions and check Hub for notable activity")
 
-    parser.add_argument("--token-file", dest='token_file', required=True, help="containing access token")
     parser.add_argument("--no-verify", dest='verify', action='store_false', help="disable TLS certificate verification")
     parser.add_argument('--timeout', dest='timeout', default=15.0, help="Connection timeout in seconds")
     parser.add_argument('--retries', dest='retries', default=3, help="Maximum number of retries for a single request")
     parser.add_argument('--skip-bom', dest='skip_bom', action='store_true', default=None, help="Skip BOM lookup")
 
     group1 = parser.add_argument_group('required arguments')
-    group1.add_argument("--base-url", required=True, help="Hub server URL e.g. https://your.blackduck.url")
     group1.add_argument('--input', dest='json_file_input', required=True, help="File containing Sage output e.g. sage_says.json")
     group1.add_argument('--output', dest='csv_file_output', required=True, help="Output CSV file")
+    group1.add_argument("--token-file", dest='token_file', required=True, help="containing access token")
 
     args = parser.parse_args()
 
@@ -251,7 +250,7 @@ if __name__ == '__main__':
         access_token = tf.readline().strip()
 
     bd = Client(
-        base_url=args.base_url,
+        base_url=sageJson['hub_url'],
         token=access_token,
         verify=args.verify,
         timeout=args.timeout,
