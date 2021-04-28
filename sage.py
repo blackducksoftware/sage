@@ -327,7 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('hub_url', help="Hub server URL e.g. https://example.com")
     parser.add_argument('api_token', nargs='?', default=None, help="API access token")
 
-    parser.add_argument('--api_token_file', dest='token_file', default=None, help="File containing access token")
+    parser.add_argument('--token-file', dest='token_file', default=None, help="File containing access token")
     parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME")
     parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD")
 
