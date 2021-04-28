@@ -3,10 +3,10 @@
 # sage_version_activity_to_csv.py
 
 import argparse
-import arrow
 from blackduck import Client
 import csv
 import datetime
+from dateutil.parser import isoparse
 import json
 import logging
 import os
@@ -62,7 +62,7 @@ def check_for_activity(events):
             scanEvents += 1
             if not latestScanTimestamp:
                 latestScanTimestamp = event['timestamp']
-            if arrow.get(event['timestamp']) - arrow.get(latestScanTimestamp) > datetime.timedelta():
+            if isoparse(event['timestamp']) - isoparse(latestScanTimestamp) > datetime.timedelta():
                 latestScanTimestamp = event['timestamp']
 
         # high frequency scanning is best checked from codelocations instead of project versions
@@ -95,7 +95,7 @@ def check_for_activity(events):
 
         if not latestNotableTimestamp:
             latestNotableTimestamp = event['timestamp']
-        if arrow.get(event['timestamp']) - arrow.get(latestNotableTimestamp) > datetime.timedelta():
+        if isoparse(event['timestamp']) - isoparse(latestNotableTimestamp) > datetime.timedelta():
             latestNotableTimestamp = event['timestamp']
 
         if compositeKey in notableCounts:
@@ -174,7 +174,7 @@ def process_project_version(project, version):
                 continue
             if not latest_summary_timestamp:
                 latest_summary_timestamp = ts
-            if arrow.get(ts) - arrow.get(latest_summary_timestamp) > datetime.timedelta():
+            if isoparse(ts) - isoparse(latest_summary_timestamp) > datetime.timedelta():
                 latest_summary_timestamp = ts
 
     # Look at event history for activity
