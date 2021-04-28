@@ -86,6 +86,12 @@ def check_for_activity(events):
             continue
         if eventType == 'COMPONENT' and event['action'] == 'Policy Violation Cleared':
             continue
+        if eventType == 'POLICY' and event['action'] == 'Policy Rule Evaluated':
+            continue
+        if eventType == 'KB_COMPONENT' and event['action'] == 'KB Component Deprecated':
+            continue
+        if eventType == 'KB_COMPONENT_VERSION' and event['action'] == 'KB Component Version Deprecated':
+            continue
 
         if not latestNotableTimestamp:
             latestNotableTimestamp = event['timestamp']
