@@ -4,6 +4,8 @@
 
 import argparse
 from blackduck import Client
+from blackduck.Client import HubSession
+from blackduck.Authentication import BearerAuth, CookieAuth
 import csv
 from datetime import datetime
 from dateutil.parser import isoparse
@@ -219,7 +221,10 @@ def process_project_version(project, version):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process Sage project versions and check Hub for notable activity")
 
-    parser.add_argument("--no-verify", dest='verify', action='store_false', help="disable TLS certificate verification")
+    parser.add_argument('--token-file', dest='token_file', default=None, help="File containing access token")
+    parser.add_argument('--username', dest='username', default=None, help="Hub server USERNAME")
+    parser.add_argument('--password', dest='password', default=None, help="Hub server PASSWORD")
+
     parser.add_argument('--timeout', dest='timeout', default=15.0, help="Connection timeout in seconds")
     parser.add_argument('--retries', dest='retries', default=3, help="Maximum number of retries for a single request")
     parser.add_argument('--skip-bom', dest='skip_bom', action='store_true', default=None, help="Skip BOM lookup")
@@ -227,7 +232,6 @@ if __name__ == '__main__':
     group1 = parser.add_argument_group('required arguments')
     group1.add_argument('--input', dest='json_file_input', required=True, help="File containing Sage output e.g. sage_says.json")
     group1.add_argument('--output', dest='csv_file_output', required=True, help="Output CSV file")
-    group1.add_argument("--token-file", dest='token_file', required=True, help="containing access token")
 
     args = parser.parse_args()
 
@@ -240,16 +244,21 @@ if __name__ == '__main__':
         sageJson = json.load(jf)
         logging.info("Loaded data for %i codelocations across %i projects", len(sageJson['scans']), len(sageJson['projects']))
 
-    with open(args.token_file, 'r') as tf:
-        access_token = tf.readline().strip()
+    base_url = sageJson['hub_url']
+    verify = False  # TLS certificate verification
+    session = HubSession(base_url, timeout=args.timeout, retries=args.retries, verify=verify)
 
-    bd = Client(
-        base_url=sageJson['hub_url'],
-        token=access_token,
-        verify=args.verify,
-        timeout=args.timeout,
-        retries=args.retries,
-    )
+    # De-tangle the possibilities of specifying credentials
+    if args.token_file:
+        tf = open(args.token_file, 'r')
+        access_token = tf.readline().strip()
+        auth = BearerAuth(session, access_token)
+    elif args.username and args.password:
+        auth = CookieAuth(session, args.username, args.password)
+    else:
+        raise SystemError("Authentication credentials not specified")
+
+    bd = Client(base_url=base_url, session=session, auth=auth)
 
     projectDict = {}   # key:projectId: json
     pvDict = {}        # key:projectId: json array
