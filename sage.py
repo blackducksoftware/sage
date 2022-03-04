@@ -68,12 +68,20 @@ class BlackDuckSage(object):
         self.data = {}
 
     def _check_file_permissions(self):
+        '''Test that we can write to the file path given and if there is an issue let the user know
+        '''
         f = Path(self.file)
-        if f.exists():
-            if not os.access(self.file, os.W_OK):
-                raise PermissionError("Need write access to file {} in order to save the analysis results".format(self.file))
-        else:
-            open(self.file, "w")  # will fail if we don't have write permissions
+        # Doing this the pythonic way of just opening the file to write and checking for exceptions
+        try:
+            open(self.file, "w")
+        except:
+            if f.is_dir():
+                logging.error(f"Sage must be given a file to write results into, but {self.file} is a directory")
+            elif f.is_file():
+                logging.error(f"Cannot open file {self.file} for writing. Check the file permissions and make sure the user has write privileges")
+            else:
+                logging.error(f"Whoops, not sure what went wrong but we cannot open ({self.file}) for writing")
+            raise
 
     @staticmethod
     def _remove_white_space(message):
