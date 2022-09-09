@@ -171,6 +171,7 @@ class BlackDuckSage(object):
             project['versions'] = versions
             project['num_versions'] = len(versions)
             total_versions += len(versions)
+
         projects = [p for p in projects if p['name'] not in errant_projects]
         projects = [self._copy_common_attributes(p) for p in projects]
         self.data['projects'] = projects
