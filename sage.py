@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from requests.exceptions import HTTPError
 import sys
 
 # TODO: Find scans (code locations) whose scan frequency is higher than we recommend
@@ -135,11 +136,21 @@ class BlackDuckSage(object):
         logging.info("Fetched %i projects", len(projects))
         total_versions = 0
         project_count = 0
+        #
+        # When Sage runs for a long time there is a chance someone deletes a project while it is gathering data
+        # about the projects. To defend against that we catch the error and build a list of errant projects 
+        # and remove them from the list (below)
+        errant_projects = list()
         for project in projects:
             project_count += 1
             project_name = project['name']
             print("Project ({}/{}): {};  versions:".format(project_count, len(projects), project_name), end='', flush=True)
-            versions = list(hub.get_resource('versions', project, headers={'accept': "application/vnd.blackducksoftware.project-detail-5+json"}))
+            try:
+                versions = list(hub.get_resource('versions', project, headers={'accept': "application/vnd.blackducksoftware.project-detail-5+json"}))
+            except HTTPError:
+                logging.warning(f"HTTPError when attempting retrieve versions for project {project['name']}, removing project")
+                errant_projects.append(project['name'])
+                continue
             print(len(versions))
             for version in versions:
                 version_name = version['versionName']
@@ -160,6 +171,8 @@ class BlackDuckSage(object):
             project['versions'] = versions
             project['num_versions'] = len(versions)
             total_versions += len(versions)
+
+        projects = [p for p in projects if p['name'] not in errant_projects]
         projects = [self._copy_common_attributes(p) for p in projects]
         self.data['projects'] = projects
 
