@@ -36,6 +36,22 @@ python3 sage.py https://your-hub-dns {api-token}
 python3 sage.py https://your-hub-dns {api-token} -j # include jobs statistics
 ```
 
+Or using Docker/Podman,
+
+```bash
+docker build -t blackduck-sage .
+docker run --rm -v $PWD/output:/var/log blackduck-sage https://your-hub-dns {api-token}
+docker run --rm -v $PWD/output:/var/log blackduck-sage https://your-hub-dns {api-token} -j # include job statistics
+```
+
+```bash
+podman build -t blackduck-sage .
+podman run --rm -v $PWD/output:/var/log -it blackduck-sage https://your-hub-dns {api-token}
+podman run --rm -v $PWD/output:/var/log -it blackduck-sage https://your-hub-dns {api-token} -j # include job statistics
+```
+
+The json output will be stored in the `$PWD/output` directory. 
+
 ## Using a Proxy
 
 Sage uses the blackduck PyPi library which, in turn, uses the Python requests library. The requests library supports use of proxies which can be configured via environment variables (see details at https://requests.readthedocs.io/en/master/user/advanced/), e.g.
@@ -43,6 +59,16 @@ Sage uses the blackduck PyPi library which, in turn, uses the Python requests li
 ```
 $ export HTTP_PROXY="http://10.10.1.10:3128"
 $ export HTTPS_PROXY="http://10.10.1.10:1080"
+```
+
+If you are using Docker or Podman containers, you need to specify the `HTTP_PROXY` and `HTTPS_PROXY` when you build the container.
+
+```bash
+docker build --build-arg HTTP_PROXY="http://10.10.1.10:3128" --build-arg HTTPS_PROXY="http://10.10.1.10:1080" -t blackduck-sage .
+```
+
+```bash
+podman build --build-arg HTTP_PROXY="http://10.10.1.10:3128" --build-arg HTTPS_PROXY="http://10.10.1.10:1080" -t blackduck-sage .
 ```
 
 ## Output
