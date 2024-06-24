@@ -20,8 +20,8 @@ def create_project_versions(hub_instance, project_name, versions=[], project_par
 
 	if response.status_code == 201:
 		project = hub_instance.get_project_by_name(project_name)
-		for version in range(20):
-			response = hub_instance.create_project_version(project, version)
+		for version in versions:
+			response = hub_instance.create_project_version(project, str(version))
 			if response.status_code == 201:
 				logging.debug("Created version {}".format(version))
 			else:
